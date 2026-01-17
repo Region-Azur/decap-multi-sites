@@ -33,10 +33,16 @@ function normalizeEmail(value) {
 }
 
 async function getAuthInfo(req) {
+  // Log all headers for debugging purposes
+  console.log("DEBUG: Incoming headers:", JSON.stringify(req.headers, null, 2));
+
   const issuer = req.header("x-auth-request-issuer") || DEFAULT_OIDC_ISSUER;
-  const sub = req.header("x-auth-request-user");
-  const emailHeader = req.header("x-auth-request-email");
-  const preferredUsername = req.header("x-auth-request-preferred-username");
+
+  // Try X-Auth-Request headers first, then fall back to X-Forwarded headers
+  const sub = req.header("x-auth-request-user") || req.header("x-forwarded-user");
+  const emailHeader = req.header("x-auth-request-email") || req.header("x-forwarded-email");
+  const preferredUsername = req.header("x-auth-request-preferred-username") || req.header("x-forwarded-preferred-username");
+
   const email = normalizeEmail(emailHeader) || normalizeEmail(preferredUsername);
   const name = preferredUsername || sub || emailHeader;
 
@@ -231,6 +237,23 @@ app.post("/api/admin/permissions", async (req, res) => {
     .merge();
 
   res.status(201).json({ user_id: user.id, site_id });
+});
+
+app.get("/api/admin/users", async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) {
+    return;
+  }
+
+  const q = (req.query.q || "").toLowerCase().trim();
+  let query = db("users").orderBy("email");
+
+  if (q) {
+    query = query.where("email", "like", `%${q}%`);
+  }
+
+  const users = await query;
+  res.json({ users });
 });
 
 app.delete("/api/admin/permissions", async (req, res) => {

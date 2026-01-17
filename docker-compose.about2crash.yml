@@ -10,11 +10,12 @@ services:
       - OAUTH2_PROXY_EMAIL_DOMAINS=*
       - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid email name}
       - OAUTH2_PROXY_REDIRECT_URL=${OAUTH2_PROXY_REDIRECT_URL}
-      - OAUTH2_PROXY_UPSTREAMS=http://portal:3000/
+      - OAUTH2_PROXY_UPSTREAMS=http://portal:3000/,http://api:4000/api/
       - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
       - OAUTH2_PROXY_SET_XAUTHREQUEST=true
       - OAUTH2_PROXY_PASS_USER_HEADERS=true
       - OAUTH2_PROXY_REVERSE_PROXY=${OAUTH2_PROXY_REVERSE_PROXY:-true}
+      - OAUTH2_PROXY_PASS_ACCESS_TOKEN=true
       - OAUTH2_PROXY_CODE_CHALLENGE_METHOD=${OAUTH2_PROXY_CODE_CHALLENGE_METHOD:-S256}
       - OAUTH2_PROXY_COOKIE_SECURE=${OAUTH2_PROXY_COOKIE_SECURE:-true}
     restart: unless-stopped
@@ -62,7 +63,7 @@ services:
 
   mysql:
     image: mysql:8.4
-    profiles: ["mysql"]
+    profiles: [ "mysql" ]
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_DATABASE=${MYSQL_DATABASE}
@@ -80,10 +81,11 @@ volumes:
   mysql_data:
   sqlite_data:
 
+
 networks:
   nginx-proxy-manager_npm-network:
     external: true
   backend:
-    internal: true
+    driver: bridge
   db:
     internal: true

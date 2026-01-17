@@ -202,6 +202,141 @@ function renderSitePicker(user, sites) {
 </html>`;
 }
 
+function renderAdminPanel(user, sites, users) {
+  const sitesRows = sites.map(site => `
+    <tr>
+        <td>${site.id}</td>
+        <td>${site.display_name}</td>
+        <td>${site.github_repo}</td>
+        <td>${site.enabled ? 'Yes' : 'No'}</td>
+    </tr>
+  `).join("");
+
+  const usersRows = users.map(u => `
+    <option value="${u.email}">${u.name} (${u.email})</option>
+  `).join("");
+
+  const sitesOptions = sites.map(s => `
+    <option value="${s.id}">${s.display_name} (${s.id})</option>
+  `).join("");
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Decap CMS Admin Panel</title>
+  <style>
+    body { font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1, h2 { border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #f4f4f4; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    input, select { padding: 8px; width: 100%; box-sizing: border-box; }
+    button { padding: 10px 15px; background: #007bff; color: white; border: none; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    .section { margin-bottom: 40px; background: #f9f9f9; padding: 20px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Admin Panel</h1>
+  <p>Welcome, ${user.name} | <a href="/admin">Back to Site Picker</a></p>
+
+  <div class="section">
+    <h2>Sites</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Repo</th><th>Enabled</th></tr>
+      </thead>
+      <tbody>${sitesRows}</tbody>
+    </table>
+
+    <h3>Add New Site</h3>
+    <form id="addSiteForm">
+      <div class="form-group"><label>ID (e.g. my-site)</label><input type="text" name="id" required pattern="[a-z0-9-]+"></div>
+      <div class="form-group"><label>Display Name</label><input type="text" name="display_name" required></div>
+      <div class="form-group"><label>GitHub Repo (e.g. org/repo)</label><input type="text" name="github_repo" required></div>
+      <div class="form-group"><label>Branch</label><input type="text" name="branch" value="main"></div>
+      <button type="submit">Create Site</button>
+    </form>
+  </div>
+
+  <div class="section">
+    <h2>Permissions</h2>
+    <p>Grant access to a user for a specific site.</p>
+    <form id="addPermissionForm">
+      <div class="form-group">
+        <label>User</label>
+        <select name="email" required>
+            <option value="">Select User...</option>
+            ${usersRows}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Site</label>
+        <select name="site_id" required>
+            <option value="">Select Site...</option>
+            ${sitesOptions}
+        </select>
+      </div>
+       <div class="form-group">
+        <label>Role</label>
+        <select name="role">
+            <option value="editor">Editor</option>
+            <option value="publisher">Publisher</option>
+        </select>
+      </div>
+      <button type="submit">Grant Permission</button>
+    </form>
+  </div>
+
+  <script>
+    document.getElementById('addSiteForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = Object.fromEntries(formData.entries());
+      
+      try {
+        const res = await fetch('/api/admin/sites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        if (res.ok) {
+           alert('Site created!');
+           window.location.reload();
+        } else {
+           const err = await res.json();
+           alert('Error: ' + (err.error || 'Unknown error'));
+        }
+      } catch (err) { alert('Network error'); }
+    });
+
+    document.getElementById('addPermissionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = Object.fromEntries(formData.entries());
+      
+      try {
+        const res = await fetch('/api/admin/permissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        if (res.ok) {
+           alert('Permission granted!');
+        } else {
+           const err = await res.json();
+           alert('Error: ' + (err.error || 'Unknown error'));
+        }
+      } catch (err) { alert('Network error'); }
+    });
+  </script>
+</body>
+</html>`;
+}
+
 function renderDecapShell(siteId) {
   return `<!doctype html>
 <html>
@@ -233,8 +368,31 @@ async function handleAdminHome(req, res) {
   res.type("html").send(renderSitePicker(user, sites));
 }
 
+async function handleAdminPanel(req, res) {
+  const auth = await getAuthInfo(req);
+  if (!auth) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+
+  const user = await getOrCreateUser(auth);
+  if (!user.is_admin) {
+    res.status(403).send("Forbidden. Access restricted to admins.");
+    return;
+  }
+
+  // Fetch data from internal DB directly since we are in the trusted network/same DB
+  // Alternatively, fetch from API if separation is strict, but direct DB is easier here 
+  // since Portal and API share the DB code/access in this setup.
+  const sites = await db("sites").orderBy("display_name");
+  const users = await db("users").orderBy("name");
+
+  res.type("html").send(renderAdminPanel(user, sites, users));
+}
+
 app.get("/", handleAdminHome);
 app.get("/admin", handleAdminHome);
+app.get("/admin-panel", handleAdminPanel);
 
 app.get("/admin/:siteId", async (req, res) => {
   const auth = await getAuthInfo(req);
