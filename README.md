@@ -106,6 +106,7 @@ Backend must:
 - Scopes that provide stable `sub`, `email`, and `name`. In Hitobito this typically means enabling `openid`, `email`, and `name` scopes.
 - If you see **"Der angeforderte Scope ist ungültig, unbekannt oder fehlerhaft."**, verify the exact scope names in Hitobito. Only enable scopes that are listed in the provider UI (e.g. `openid`, `email`, `name`), and avoid custom/unknown scopes.
 
+
 ### GitHub
 - GitHub App with Contents write permissions.
 - Install on each site repo.
