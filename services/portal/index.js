@@ -23,19 +23,42 @@ function normalizeEmail(value) {
   return normalized.includes("@") ? normalized : "";
 }
 
+async function fetchUserInfo(issuer, accessToken) {
+  try {
+    const userInfoRes = await fetch(`${issuer}/oauth/userinfo`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    });
+
+    if (userInfoRes.ok) {
+      const userInfo = await userInfoRes.json();
+      console.log("DEBUG: User info fetched:", JSON.stringify(userInfo, null, 2));
+      return userInfo;
+    } else {
+      console.error("DEBUG: Failed to fetch user info:", userInfoRes.status, await userInfoRes.text())
+    }
+  } catch (err) {
+    console.error("DEBUG: Error fetching user info:", err);
+  }
+  return null;
+}
+
 async function getAuthInfo(req) {
   // Log all headers for debugging purposes
   console.log("DEBUG: Incoming headers:", JSON.stringify(req.headers, null, 2));
 
   const issuer = req.header("x-auth-request-issuer") || DEFAULT_OIDC_ISSUER;
-  
+
   // Try X-Auth-Request headers first, then fall back to X-Forwarded headers
   const sub = req.header("x-auth-request-user") || req.header("x-forwarded-user");
   const emailHeader = req.header("x-auth-request-email") || req.header("x-forwarded-email");
   const preferredUsername = req.header("x-auth-request-preferred-username") || req.header("x-forwarded-preferred-username");
-  
-  const email = normalizeEmail(emailHeader) || normalizeEmail(preferredUsername);
-  const name = preferredUsername || sub || emailHeader;
+  const accessToken = req.header("x-auth-request-access-token") || req.header("x-forwarded-access-token");
+
+  let email = normalizeEmail(emailHeader) || normalizeEmail(preferredUsername);
+  let name = preferredUsername || sub || emailHeader;
 
   console.log(`DEBUG: Extracted auth info: issuer=${issuer}, sub=${sub}, email=${email}, name=${name}`);
 
@@ -49,6 +72,7 @@ async function getAuthInfo(req) {
     sub,
     email,
     name,
+    accessToken,
   };
 }
 
@@ -58,6 +82,33 @@ async function getOrCreateUser(auth) {
     .first();
 
   if (existing) {
+    if (auth.accessToken && auth.issuer && (!existing.last_synced_at || Date.now() - new Date(existing.last_synced_at).getTime() > 24 * 60 * 60 * 1000)) {
+      console.log(`DEBUG: Syncing user info for ${auth.email}`);
+      const userInfo = await fetchUserInfo(auth.issuer, auth.accessToken);
+
+      if (userInfo) {
+        let newName = existing.name; // Default to existing
+        const { nickname, first_name, last_name, email: fetchedEmail } = userInfo;
+
+        if (nickname) {
+          newName = nickname;
+        } else if (first_name) {
+          newName = first_name;
+          if (last_name) {
+            newName += ` ${last_name}`;
+          }
+        } else if (last_name) {
+          newName = last_name;
+        }
+
+        await db("users").where({ id: existing.id }).update({
+          name: newName,
+          last_synced_at: new Date(),
+        });
+
+        return db("users").where({ id: existing.id }).first();
+      }
+    }
     return existing;
   }
 
@@ -65,13 +116,36 @@ async function getOrCreateUser(auth) {
   const isAdmin = isFirstUser || ADMIN_EMAILS.includes(auth.email);
   const id = crypto.randomUUID();
 
+  // Fetch initial info for new user
+  let initialName = auth.name;
+  let lastSyncedAt = null;
+
+  if (auth.accessToken && auth.issuer) {
+    const userInfo = await fetchUserInfo(auth.issuer, auth.accessToken);
+    if (userInfo) {
+      lastSyncedAt = new Date();
+      const { nickname, first_name, last_name } = userInfo;
+      if (nickname) {
+        initialName = nickname;
+      } else if (first_name) {
+        initialName = first_name;
+        if (last_name) {
+          initialName += ` ${last_name}`;
+        }
+      } else if (last_name) {
+        initialName = last_name;
+      }
+    }
+  }
+
   await db("users").insert({
     id,
     oidc_issuer: auth.issuer,
     oidc_sub: auth.sub,
     email: auth.email,
-    name: auth.name,
+    name: initialName,
     is_admin: isAdmin,
+    last_synced_at: lastSyncedAt
   });
 
   return db("users").where({ id }).first();

@@ -47,9 +47,18 @@ async function ensureSchema(db) {
       table.string("oidc_sub").notNullable();
       table.string("email").notNullable();
       table.string("name").notNullable();
+      table.dateTime("last_synced_at").nullable();
       table.boolean("is_admin").notNullable().defaultTo(false);
       table.unique(["oidc_issuer", "oidc_sub"]);
     });
+  } else {
+    // Migration: add last_synced_at if it doesn't exist
+    const hasLastSynced = await db.schema.hasColumn("users", "last_synced_at");
+    if (!hasLastSynced) {
+      await db.schema.table("users", (table) => {
+        table.dateTime("last_synced_at").nullable();
+      });
+    }
   }
 
   const hasSites = await db.schema.hasTable("sites");
