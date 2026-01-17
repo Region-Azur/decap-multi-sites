@@ -24,14 +24,23 @@ function normalizeEmail(value) {
 }
 
 async function getAuthInfo(req) {
+  // Log all headers for debugging purposes
+  console.log("DEBUG: Incoming headers:", JSON.stringify(req.headers, null, 2));
+
   const issuer = req.header("x-auth-request-issuer") || DEFAULT_OIDC_ISSUER;
-  const sub = req.header("x-auth-request-user");
-  const emailHeader = req.header("x-auth-request-email");
-  const preferredUsername = req.header("x-auth-request-preferred-username");
+  
+  // Try X-Auth-Request headers first, then fall back to X-Forwarded headers
+  const sub = req.header("x-auth-request-user") || req.header("x-forwarded-user");
+  const emailHeader = req.header("x-auth-request-email") || req.header("x-forwarded-email");
+  const preferredUsername = req.header("x-auth-request-preferred-username") || req.header("x-forwarded-preferred-username");
+  
   const email = normalizeEmail(emailHeader) || normalizeEmail(preferredUsername);
   const name = preferredUsername || sub || emailHeader;
 
+  console.log(`DEBUG: Extracted auth info: issuer=${issuer}, sub=${sub}, email=${email}, name=${name}`);
+
   if (!issuer || !sub || !email) {
+    console.log("DEBUG: Auth info missing required fields");
     return null;
   }
 
