@@ -105,7 +105,8 @@ Backend must:
 - Redirect URI to `/oauth2/callback`.
 - Scopes that provide stable `sub`, `email`, and `name`. In Hitobito this typically means enabling `openid`, `email`, and `name` scopes.
 - If you see **"Der angeforderte Scope ist ungültig, unbekannt oder fehlerhaft."**, verify the exact scope names in Hitobito. Only enable scopes that are listed in the provider UI (e.g. `openid`, `email`, `name`), and avoid custom/unknown scopes.
-
+- If you are running behind Nginx Proxy Manager, keep `OAUTH2_PROXY_REVERSE_PROXY=true` so oauth2-proxy trusts forwarded headers. If you test without TLS (plain HTTP), set `OAUTH2_PROXY_COOKIE_SECURE=false` to avoid login loops/403s.
+- oauth2-proxy should request `OAUTH2_PROXY_SCOPE="openid email name"` to match the enabled Hitobito scopes.
 
 ### GitHub
 - GitHub App with Contents write permissions.

@@ -127,7 +127,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.get("/admin", async (req, res) => {
+async function handleAdminHome(req, res) {
   const auth = await getAuthInfo(req);
   if (!auth) {
     res.status(401).send("Unauthorized");
@@ -137,7 +137,10 @@ app.get("/admin", async (req, res) => {
   const user = await getOrCreateUser(auth);
   const sites = await listPermittedSites(user);
   res.type("html").send(renderSitePicker(user, sites));
-});
+}
+
+app.get("/", handleAdminHome);
+app.get("/admin", handleAdminHome);
 
 app.get("/admin/:siteId", async (req, res) => {
   const auth = await getAuthInfo(req);
