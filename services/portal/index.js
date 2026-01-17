@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const express = require("express");
-const { createDb, ensureSchema } = require("../shared/db");
+const { createDb, ensureSchema } = require("./shared/db");
 
 const PORT = Number(process.env.PORTAL_PORT || 3000);
 const DATABASE_URL = process.env.DATABASE_URL;

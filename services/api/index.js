@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 const { createAppAuth } = require("@octokit/auth-app");
 const { Octokit } = require("@octokit/rest");
-const { createDb, ensureSchema } = require("../shared/db");
+const { createDb, ensureSchema } = require("./shared/db");
 
 const PORT = Number(process.env.API_PORT || 4000);
 const DATABASE_URL = process.env.DATABASE_URL;
