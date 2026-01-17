@@ -14,11 +14,22 @@ const API_BASE_URL = process.env.API_BASE_URL || process.env.PORTAL_BASE_URL || 
 const app = express();
 const db = createDb(DATABASE_URL);
 
+function normalizeEmail(value) {
+  if (!value) {
+    return "";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized.includes("@") ? normalized : "";
+}
+
 async function getAuthInfo(req) {
   const issuer = req.header("x-auth-request-issuer") || DEFAULT_OIDC_ISSUER;
   const sub = req.header("x-auth-request-user");
-  const email = req.header("x-auth-request-email");
-  const name = req.header("x-auth-request-preferred-username") || sub || email;
+  const emailHeader = req.header("x-auth-request-email");
+  const preferredUsername = req.header("x-auth-request-preferred-username");
+  const email = normalizeEmail(emailHeader) || normalizeEmail(preferredUsername);
+  const name = preferredUsername || sub || emailHeader;
 
   if (!issuer || !sub || !email) {
     return null;
@@ -27,7 +38,7 @@ async function getAuthInfo(req) {
   return {
     issuer,
     sub,
-    email: email.toLowerCase(),
+    email,
     name,
   };
 }

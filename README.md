@@ -103,10 +103,10 @@ Backend must:
 ### Hitobito
 - OIDC client for oauth2-proxy.
 - Redirect URI to `/oauth2/callback`.
-- Scopes that provide stable `sub`, `email`, and `name`. In Hitobito this typically means enabling `openid`, `email`, and `name` scopes.
+- Scopes that provide stable `sub`, `email`, and `name`. In Hitobito this typically means enabling `openid`, `email`, and `name` scopes. If your Hitobito config exposes the non-standard `oidc` scope, include it in the requested scopes so oauth2-proxy can retrieve the OIDC ID token and email claim.
 - If you see **"Der angeforderte Scope ist ungültig, unbekannt oder fehlerhaft."**, verify the exact scope names in Hitobito. Only enable scopes that are listed in the provider UI (e.g. `openid`, `email`, `name`), and avoid custom/unknown scopes.
 - If you are running behind Nginx Proxy Manager, keep `OAUTH2_PROXY_REVERSE_PROXY=true` so oauth2-proxy trusts forwarded headers. If you test without TLS (plain HTTP), set `OAUTH2_PROXY_COOKIE_SECURE=false` to avoid login loops/403s.
-- oauth2-proxy should request `OAUTH2_PROXY_SCOPE="openid email name"` to match the enabled Hitobito scopes.
+- oauth2-proxy should request `OAUTH2_PROXY_SCOPE="openid email name"` (or `openid email name oidc` when Hitobito requires the `oidc` scope) to match the enabled Hitobito scopes. If Hitobito only returns the email in `preferred_username`, the portal/API will accept it as long as it looks like an email address.
 
 ### GitHub
 - GitHub App with Contents write permissions.
