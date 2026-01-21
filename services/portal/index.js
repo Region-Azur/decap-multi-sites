@@ -25,7 +25,8 @@ function normalizeEmail(value) {
 
 async function fetchUserInfo(issuer, accessToken) {
   try {
-    const userInfoRes = await fetch(`${issuer}/oauth/userinfo`, {
+    const normalizedIssuer = issuer.endsWith("/") ? issuer.slice(0, -1) : issuer;
+    const userInfoRes = await fetch(`${normalizedIssuer}/oauth/userinfo`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",
@@ -75,7 +76,7 @@ async function getAuthInfo(req) {
     accessToken,
   };
 }
-
+// ...
 async function getOrCreateUser(auth) {
   const existing = await db("users")
     .where({ oidc_issuer: auth.issuer, oidc_sub: auth.sub })
@@ -88,17 +89,17 @@ async function getOrCreateUser(auth) {
 
       if (userInfo) {
         let newName = existing.name; // Default to existing
-        const { nickname, first_name, last_name, email: fetchedEmail } = userInfo;
+        const { nickname, given_name, family_name, name } = userInfo;
 
         if (nickname) {
           newName = nickname;
-        } else if (first_name) {
-          newName = first_name;
-          if (last_name) {
-            newName += ` ${last_name}`;
+        } else if (given_name) {
+          newName = given_name;
+          if (family_name) {
+            newName += ` ${family_name}`;
           }
-        } else if (last_name) {
-          newName = last_name;
+        } else if (name) {
+          newName = name;
         }
 
         await db("users").where({ id: existing.id }).update({
@@ -124,16 +125,16 @@ async function getOrCreateUser(auth) {
     const userInfo = await fetchUserInfo(auth.issuer, auth.accessToken);
     if (userInfo) {
       lastSyncedAt = new Date();
-      const { nickname, first_name, last_name } = userInfo;
+      const { nickname, given_name, family_name, name } = userInfo;
       if (nickname) {
         initialName = nickname;
-      } else if (first_name) {
-        initialName = first_name;
-        if (last_name) {
-          initialName += ` ${last_name}`;
+      } else if (given_name) {
+        initialName = given_name;
+        if (family_name) {
+          initialName += ` ${family_name}`;
         }
-      } else if (last_name) {
-        initialName = last_name;
+      } else if (name) {
+        initialName = name;
       }
     }
   }
@@ -164,14 +165,22 @@ async function listPermittedSites(user) {
 }
 
 async function hasPermission(user, siteId) {
+  console.log(`DEBUG: Checking permission for user ${user.email} (admin=${user.is_admin}) on site ${siteId}`);
   if (user.is_admin) {
     const site = await db("sites").where({ id: siteId, enabled: true }).first();
+    console.log(`DEBUG: Site lookup for admin: ${site ? "Found" : "Not Found"} (enabled=true)`);
+    if (!site) {
+      // Check if site exists but is disabled
+      const disabledSite = await db("sites").where({ id: siteId }).first();
+      console.log(`DEBUG: Disabled check: ${disabledSite ? "Site exists but disabled" : "Site does not exist"}`);
+    }
     return Boolean(site);
   }
 
   const permission = await db("site_permissions")
     .where({ user_id: user.id, site_id: siteId })
     .first();
+  console.log(`DEBUG: Permission lookup for user: ${permission ? "Found" : "Not Found"}`);
   return Boolean(permission);
 }
 
@@ -254,7 +263,7 @@ function renderAdminPanel(user, sites, users) {
 
     <h3>Add New Site</h3>
     <form id="addSiteForm">
-      <div class="form-group"><label>ID (e.g. my-site)</label><input type="text" name="id" required pattern="[a-z0-9-]+"></div>
+      <div class="form-group"><label>ID (e.g. my-site)</label><input type="text" name="id" required pattern="[a-z0-9\-]+"></div>
       <div class="form-group"><label>Display Name</label><input type="text" name="display_name" required></div>
       <div class="form-group"><label>GitHub Repo (e.g. org/repo)</label><input type="text" name="github_repo" required></div>
       <div class="form-group"><label>Branch</label><input type="text" name="branch" value="main"></div>
@@ -344,9 +353,9 @@ function renderDecapShell(siteId) {
     <meta charset="utf-8" />
     <title>Decap CMS - ${siteId}</title>
     <link rel="cms-config-url" href="/configs/${siteId}.yml" />
-    <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
   </head>
   <body>
+    <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
     <script>window.CMS.init();</script>
   </body>
 </html>`;
@@ -412,21 +421,29 @@ app.get("/admin/:siteId", async (req, res) => {
 });
 
 app.get("/configs/:siteId.yml", async (req, res) => {
+  console.log(`DEBUG: Config request for ${req.params.siteId}`);
+
   const auth = await getAuthInfo(req);
   if (!auth) {
+    console.log("DEBUG: Config request unauthorized (no auth info)");
     res.status(401).send("Unauthorized");
     return;
   }
 
   const user = await getOrCreateUser(auth);
   const siteId = req.params.siteId;
-  if (!(await hasPermission(user, siteId))) {
+
+  const permitted = await hasPermission(user, siteId);
+  console.log(`DEBUG: Permission check for user ${user.email} on site ${siteId}: ${permitted}`);
+
+  if (!permitted) {
     res.status(403).send("Forbidden");
     return;
   }
 
   const site = await db("sites").where({ id: siteId }).first();
   if (!site) {
+    console.log(`DEBUG: Site ${siteId} not found in DB`);
     res.status(404).send("Not found");
     return;
   }
