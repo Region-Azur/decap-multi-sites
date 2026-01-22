@@ -256,6 +256,31 @@ app.get("/api/admin/users", async (req, res) => {
   res.json({ users });
 });
 
+// Git Gateway Compatibility Endpoints
+app.get("/api/settings", async (_req, res) => {
+  // Return empty settings or relevant git-gateway config
+  // This endpoint confirms to the client that the backend is available.
+  res.json({ git_gateway: { roles: null } });
+});
+
+app.get("/api/user", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    // requireUser handles the 401 response
+    return;
+  }
+
+  // Return user structure compatible with what Decap expects
+  // Usually it expects { email, name, avatar_url, ... }
+  // + a token if we were doing token exchange, but here we just prove identity.
+  res.json({
+    email: user.email,
+    name: user.name,
+    login: user.email,
+    id: user.id
+  });
+});
+
 app.delete("/api/admin/permissions", async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
