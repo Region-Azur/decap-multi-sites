@@ -364,24 +364,29 @@ function renderDecapShell(siteId) {
             
             // Auto-login attempt: Verify session with backend and seed local storage
             try {
+                console.log("Fetching /api/user...");
                 const res = await fetch('/api/user');
+                console.log(`Fetch / api / user status: ${ res.status } `);
+                
                 if (res.ok) {
                     const user = await res.json();
+                    console.log("User data received:", user);
                     const userData = {
                         backendName: 'git-gateway',
-                        token: 'bypass-token', // Backend uses cookies, this token is cosmetic for CMS client
+                        token: 'bypass-token', 
                         name: user.name,
                         email: user.email,
                         avatar_url: user.avatar_url,
                         login: user.login
                     };
-                    // Set both legacy and new keys to cover all bases
                     localStorage.setItem('decap-cms-user', JSON.stringify(userData));
                     localStorage.setItem('netlify-cms-user', JSON.stringify(userData));
-                    console.log("Auto-login credentials set.");
+                    console.log("Auto-login credentials set in localStorage.");
+                } else {
+                    console.error("Fetch /api/user failed: " + await res.text());
                 }
             } catch (e) {
-                console.warn("Auto-login failed", e);
+                console.error("Auto-login exception", e);
             }
 
             window.CMS.init();
