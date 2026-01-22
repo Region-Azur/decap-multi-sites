@@ -37,6 +37,9 @@ services:
       - HITOBITO_OIDC_ISSUER=${HITOBITO_OIDC_ISSUER}
     volumes:
       - sqlite_data:/data
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     restart: unless-stopped
     networks:
       - backend
