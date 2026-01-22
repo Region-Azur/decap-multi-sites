@@ -407,5 +407,6 @@ app.delete("/api/sites/:siteId/contents", async (req, res) => {
   app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`API listening on ${PORT}`);
+    console.log("API Service v2 (with /api/user endpoint)");
   });
 })();
