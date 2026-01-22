@@ -419,6 +419,6 @@ app.use("/api", router);
   app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`API listening on ${PORT}`);
-    console.log("API Service v2 (with /api/user endpoint)");
+    console.log("API Service v3 (Router Refactor)");
   });
 })();
