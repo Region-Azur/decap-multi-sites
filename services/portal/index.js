@@ -366,7 +366,7 @@ function renderDecapShell(siteId) {
             try {
                 console.log("Fetching /api/user...");
                 const res = await fetch('/api/user');
-                console.log(`Fetch / api / user status: ${ res.status } `);
+                console.log("Fetch / api / user status: " + res.status);
                 
                 if (res.ok) {
                     const user = await res.json();
