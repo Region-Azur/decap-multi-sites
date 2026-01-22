@@ -353,10 +353,20 @@ function renderDecapShell(siteId) {
     <meta charset="utf-8" />
     <title>Decap CMS - ${siteId}</title>
     <link rel="cms-config-url" href="/configs/${siteId}.yml" type="text/yaml" />
+    <script>window.CMS_MANUAL_INIT = true;</script>
   </head>
   <body>
     <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
-    <script>window.CMS.init();</script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function() {
+         if (window.CMS) {
+            console.log("Initializing CMS...");
+            window.CMS.init();
+         } else {
+            console.error("CMS global not found!");
+         }
+      });
+    </script>
   </body>
 </html>`;
 }
