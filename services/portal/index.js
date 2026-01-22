@@ -352,7 +352,7 @@ function renderDecapShell(siteId) {
   <head>
     <meta charset="utf-8" />
     <title>Decap CMS - ${siteId}</title>
-    <link rel="cms-config-url" href="/configs/${siteId}.yml" />
+    <link rel="cms-config-url" href="/configs/${siteId}.yml" type="text/yaml" />
   </head>
   <body>
     <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
