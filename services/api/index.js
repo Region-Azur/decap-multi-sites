@@ -23,6 +23,12 @@ const db = createDb(DATABASE_URL);
 
 app.use(express.json({ limit: API_BODY_LIMIT }));
 
+// Debug middleware to check incoming paths (fix 404 issues)
+app.use((req, res, next) => {
+  console.log(`DEBUG: Incoming Request ${req.method} ${req.url}`);
+  next();
+});
+
 function normalizeEmail(value) {
   if (!value) {
     return "";
