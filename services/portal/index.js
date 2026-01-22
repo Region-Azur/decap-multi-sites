@@ -263,7 +263,7 @@ function renderAdminPanel(user, sites, users) {
 
     <h3>Add New Site</h3>
     <form id="addSiteForm">
-      <div class="form-group"><label>ID (e.g. my-site)</label><input type="text" name="id" required pattern="[a-z0-9\-]+"></div>
+      <div class="form-group"><label>ID (e.g. my-site)</label><input type="text" name="id" required pattern="[a-z0-9-]+"></div>
       <div class="form-group"><label>Display Name</label><input type="text" name="display_name" required></div>
       <div class="form-group"><label>GitHub Repo (e.g. org/repo)</label><input type="text" name="github_repo" required></div>
       <div class="form-group"><label>Branch</label><input type="text" name="branch" value="main"></div>

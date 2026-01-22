@@ -165,11 +165,14 @@ async function getSiteForUser(user, siteId) {
     .first();
 }
 
-app.get("/api/health", (_req, res) => {
+// Router for flexible path handling (handles /api prefix stripping)
+const router = express.Router();
+
+router.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.get("/api/admin/sites", async (req, res) => {
+router.get("/admin/sites", async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
     return;
@@ -179,7 +182,7 @@ app.get("/api/admin/sites", async (req, res) => {
   res.json({ sites });
 });
 
-app.post("/api/admin/sites", async (req, res) => {
+router.post("/admin/sites", async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
     return;
@@ -213,7 +216,7 @@ app.post("/api/admin/sites", async (req, res) => {
   res.status(201).json({ id });
 });
 
-app.post("/api/admin/permissions", async (req, res) => {
+router.post("/admin/permissions", async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
     return;
@@ -245,7 +248,7 @@ app.post("/api/admin/permissions", async (req, res) => {
   res.status(201).json({ user_id: user.id, site_id });
 });
 
-app.get("/api/admin/users", async (req, res) => {
+router.get("/admin/users", async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
     return;
@@ -263,13 +266,13 @@ app.get("/api/admin/users", async (req, res) => {
 });
 
 // Git Gateway Compatibility Endpoints
-app.get("/api/settings", async (_req, res) => {
+router.get("/settings", async (_req, res) => {
   // Return empty settings or relevant git-gateway config
   // This endpoint confirms to the client that the backend is available.
   res.json({ git_gateway: { roles: null } });
 });
 
-app.get("/api/user", async (req, res) => {
+router.get("/user", async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) {
     // requireUser handles the 401 response
@@ -287,7 +290,7 @@ app.get("/api/user", async (req, res) => {
   });
 });
 
-app.delete("/api/admin/permissions", async (req, res) => {
+router.delete("/admin/permissions", async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
     return;
@@ -312,7 +315,7 @@ app.delete("/api/admin/permissions", async (req, res) => {
   res.status(204).send();
 });
 
-app.get("/api/sites/:siteId/contents", async (req, res) => {
+router.get("/sites/:siteId/contents", async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) {
     return;
@@ -338,7 +341,7 @@ app.get("/api/sites/:siteId/contents", async (req, res) => {
   res.json(response.data);
 });
 
-app.put("/api/sites/:siteId/contents", async (req, res) => {
+router.put("/sites/:siteId/contents", async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) {
     return;
@@ -376,7 +379,7 @@ app.put("/api/sites/:siteId/contents", async (req, res) => {
   res.json(response.data);
 });
 
-app.delete("/api/sites/:siteId/contents", async (req, res) => {
+router.delete("/sites/:siteId/contents", async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) {
     return;
@@ -407,6 +410,9 @@ app.delete("/api/sites/:siteId/contents", async (req, res) => {
 
   res.json(response.data);
 });
+
+app.use("/", router);
+app.use("/api", router);
 
 (async () => {
   await ensureSchema(db);
