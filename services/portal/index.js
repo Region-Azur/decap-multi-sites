@@ -358,9 +358,32 @@ function renderDecapShell(siteId) {
   <body>
     <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
     <script>
-      document.addEventListener("DOMContentLoaded", function() {
+      document.addEventListener("DOMContentLoaded", async function() {
          if (window.CMS) {
             console.log("Initializing CMS...");
+            
+            // Auto-login attempt: Verify session with backend and seed local storage
+            try {
+                const res = await fetch('/api/user');
+                if (res.ok) {
+                    const user = await res.json();
+                    const userData = {
+                        backendName: 'git-gateway',
+                        token: 'bypass-token', // Backend uses cookies, this token is cosmetic for CMS client
+                        name: user.name,
+                        email: user.email,
+                        avatar_url: user.avatar_url,
+                        login: user.login
+                    };
+                    // Set both legacy and new keys to cover all bases
+                    localStorage.setItem('decap-cms-user', JSON.stringify(userData));
+                    localStorage.setItem('netlify-cms-user', JSON.stringify(userData));
+                    console.log("Auto-login credentials set.");
+                }
+            } catch (e) {
+                console.warn("Auto-login failed", e);
+            }
+
             window.CMS.init();
          } else {
             console.error("CMS global not found!");
