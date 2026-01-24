@@ -48,6 +48,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - ADMIN_EMAILS=${ADMIN_EMAILS}
       - HITOBITO_OIDC_ISSUER=${HITOBITO_OIDC_ISSUER}
+      - HITOBITO_USERINFO_URL=${HITOBITO_USERINFO_URL}
     volumes:
       - sqlite_data:/data
     restart: unless-stopped

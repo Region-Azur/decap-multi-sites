@@ -10,7 +10,7 @@ services:
       - OAUTH2_PROXY_EMAIL_DOMAINS=*
       - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid email name}
       - OAUTH2_PROXY_REDIRECT_URL=${OAUTH2_PROXY_REDIRECT_URL}
-      - OAUTH2_PROXY_UPSTREAMS=http://api:4000/api/,http://portal:3000/
+      - OAUTH2_PROXY_UPSTREAMS=http://api:4000/api/,http://api:4000/.netlify/git/,http://portal:3000/
       - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
       - OAUTH2_PROXY_SET_XAUTHREQUEST=true
       - OAUTH2_PROXY_PASS_USER_HEADERS=true
@@ -35,6 +35,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - ADMIN_EMAILS=${ADMIN_EMAILS}
       - HITOBITO_OIDC_ISSUER=${HITOBITO_OIDC_ISSUER}
+      - HITOBITO_USERINFO_URL=${HITOBITO_USERINFO_URL}
     volumes:
       - sqlite_data:/data
     restart: unless-stopped

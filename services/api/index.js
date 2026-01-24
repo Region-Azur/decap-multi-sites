@@ -434,6 +434,7 @@ router.delete("/sites/:siteId/contents", async (req, res) => {
 
 app.use("/", router);
 app.use("/api", router);
+app.use("/.netlify/git", router);
 
 (async () => {
   await ensureSchema(db);

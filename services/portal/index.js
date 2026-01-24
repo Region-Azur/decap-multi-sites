@@ -26,7 +26,9 @@ function normalizeEmail(value) {
 async function fetchUserInfo(issuer, accessToken) {
   try {
     const normalizedIssuer = issuer.endsWith("/") ? issuer.slice(0, -1) : issuer;
-    const userInfoRes = await fetch(`${normalizedIssuer}/oauth/userinfo`, {
+    const normalizedOverride = USERINFO_URL_OVERRIDE.replace(/\/$/, "");
+    const userInfoUrl = normalizedOverride || `${normalizedIssuer}/oauth/userinfo`;
+    const userInfoRes = await fetch(userInfoUrl, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",

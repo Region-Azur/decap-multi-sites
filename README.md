@@ -107,6 +107,7 @@ Backend must:
 - If you see **"Der angeforderte Scope ist ungültig, unbekannt oder fehlerhaft."**, verify the exact scope names in Hitobito. Only enable scopes that are listed in the provider UI (e.g. `openid`, `email`, `name`), and avoid custom/unknown scopes.
 - If you are running behind Nginx Proxy Manager, keep `OAUTH2_PROXY_REVERSE_PROXY=true` so oauth2-proxy trusts forwarded headers. If you test without TLS (plain HTTP), set `OAUTH2_PROXY_COOKIE_SECURE=false` to avoid login loops/403s.
 - oauth2-proxy should request `OAUTH2_PROXY_SCOPE="openid email name"` (or `openid email name oidc` when Hitobito requires the `oidc` scope) to match the enabled Hitobito scopes. If Hitobito only returns the email in `preferred_username`, the portal/API will accept it as long as it looks like an email address.
+- If the portal cannot resolve the public issuer host from inside the container network, set `HITOBITO_USERINFO_URL` to a reachable userinfo endpoint (for example an internal hostname or proxy) while keeping `HITOBITO_OIDC_ISSUER` pointed at the public issuer URL.
 
 ### GitHub
 - GitHub App with Contents write permissions.
