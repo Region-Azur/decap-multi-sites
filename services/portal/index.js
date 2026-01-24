@@ -360,6 +360,33 @@ function renderDecapShell(siteId, token) {
     <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", async function() {
+          // MOCK Netlify Identity for Decap CMS
+          const mockUser = {
+              url: "${API_BASE_URL}",
+              token: {
+                  access_token: "${token}",
+                  token_type: "Bearer",
+                  expires_in: 3600,
+                  expires_at: Date.now() + 3600000
+              },
+              id: "user-id",
+              email: "auto-login@example.com", 
+              user_metadata: { full_name: "Auto User" },
+              app_metadata: { provider: "email" },
+              jwt: function() { return Promise.resolve(this.token.access_token); }
+          };
+
+          window.netlifyIdentity = {
+              currentUser: () => mockUser,
+              on: (event, cb) => {
+                  if (event === 'login') {
+                      setTimeout(() => cb(mockUser), 10);
+                  }
+              },
+              close: () => {},
+              logout: () => {}
+          };
+
          if (window.CMS) {
             console.log("Initializing CMS...");
             
@@ -377,13 +404,23 @@ function renderDecapShell(siteId, token) {
                 if (res.ok) {
                     const user = await res.json();
                     console.log("User data received:", user);
+                    
+                    // Update mock user with real data
+                    mockUser.id = user.id;
+                    mockUser.email = user.email;
+                    mockUser.user_metadata.full_name = user.name;
+                    
                     const userData = {
                         backendName: 'git-gateway',
                         token: '${token}', 
                         name: user.name,
                         email: user.email,
                         avatar_url: user.avatar_url,
-                        login: user.login
+                        id: user.id,
+                        login: user.login,
+                        // Enhanced fields for GoTrue compatibility
+                        user_metadata: { full_name: user.name },
+                        app_metadata: { provider: 'email' }
                     };
                     localStorage.setItem('decap-cms-user', JSON.stringify(userData));
                     localStorage.setItem('netlify-cms-user', JSON.stringify(userData));
