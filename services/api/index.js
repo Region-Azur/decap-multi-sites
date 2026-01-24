@@ -53,6 +53,27 @@ async function getAuthInfo(req) {
   const name = preferredUsername || sub || emailHeader;
 
   if (!issuer || !sub || !email) {
+    // Check for Bearer token for Decap/headless access
+    const authHeader = req.header("authorization");
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+
+      const apiToken = await db("api_tokens").where({ token }).first();
+      if (apiToken) {
+        const user = await db("users").where({ id: apiToken.user_id }).first();
+        if (user) {
+          console.log(`DEBUG: Authenticated via API token for ${user.email}`);
+          return {
+            issuer: user.oidc_issuer,
+            sub: user.oidc_sub,
+            email: user.email,
+            name: user.name,
+            isApiToken: true
+          };
+        }
+      }
+    }
+
     return null;
   }
 

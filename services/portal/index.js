@@ -1,6 +1,14 @@
 const crypto = require("crypto");
 const express = require("express");
 const { createDb, ensureSchema } = require("./shared/db");
+const dns = require("dns");
+
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+  console.log("DNS servers set to 8.8.8.8, 1.1.1.1");
+} catch (e) {
+  console.warn("Failed to set custom DNS servers:", e);
+}
 
 const PORT = Number(process.env.PORTAL_PORT || 3000);
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -346,7 +354,7 @@ function renderAdminPanel(user, sites, users) {
 </html>`;
 }
 
-function renderDecapShell(siteId) {
+function renderDecapShell(siteId, token) {
   return `<!doctype html>
 <html>
   <head>
@@ -365,7 +373,12 @@ function renderDecapShell(siteId) {
             // Auto-login attempt: Verify session with backend and seed local storage
             try {
                 console.log("Fetching /api/user...");
-                const res = await fetch('/api/user');
+                // Pass the token in the header to authenticate with the API
+                const res = await fetch('/api/user', {
+                    headers: {
+                        'Authorization': 'Bearer ${token}'
+                    }
+                });
                 console.log("Fetch / api / user status: " + res.status);
                 
                 if (res.ok) {
@@ -373,7 +386,7 @@ function renderDecapShell(siteId) {
                     console.log("User data received:", user);
                     const userData = {
                         backendName: 'git-gateway',
-                        token: 'bypass-token', 
+                        token: '${token}', 
                         name: user.name,
                         email: user.email,
                         avatar_url: user.avatar_url,
@@ -455,7 +468,15 @@ app.get("/admin/:siteId", async (req, res) => {
     return;
   }
 
-  res.type("html").send(renderDecapShell(siteId));
+  // Create a token for this session
+  const token = crypto.randomUUID();
+  await db("api_tokens").insert({
+    token,
+    user_id: user.id,
+    created_at: new Date().toISOString()
+  });
+
+  res.type("html").send(renderDecapShell(siteId, token));
 });
 
 app.get("/configs/:siteId.yml", async (req, res) => {

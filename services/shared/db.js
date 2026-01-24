@@ -83,6 +83,15 @@ async function ensureSchema(db) {
       table.primary(["user_id", "site_id"]);
     });
   }
+
+  const hasApiTokens = await db.schema.hasTable("api_tokens");
+  if (!hasApiTokens) {
+    await db.schema.createTable("api_tokens", (table) => {
+      table.string("token").primary();
+      table.string("user_id").notNullable();
+      table.string("created_at").notNullable();
+    });
+  }
 }
 
 module.exports = {
