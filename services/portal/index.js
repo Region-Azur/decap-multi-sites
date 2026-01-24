@@ -10,6 +10,7 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
   .filter(Boolean);
 const DEFAULT_OIDC_ISSUER = process.env.HITOBITO_OIDC_ISSUER || "";
 const API_BASE_URL = process.env.API_BASE_URL || process.env.PORTAL_BASE_URL || "";
+const USERINFO_URL_OVERRIDE = process.env.HITOBITO_USERINFO_URL || "";
 
 const app = express();
 const db = createDb(DATABASE_URL);
@@ -88,32 +89,37 @@ async function getOrCreateUser(auth) {
   if (existing) {
     if (auth.accessToken && auth.issuer && (!existing.last_synced_at || Date.now() - new Date(existing.last_synced_at).getTime() > 24 * 60 * 60 * 1000)) {
       console.log(`DEBUG: Syncing user info for ${auth.email}`);
-      const userInfo = await fetchUserInfo(auth.issuer, auth.accessToken);
+      try {
+        const userInfo = await fetchUserInfo(auth.issuer, auth.accessToken);
 
-      if (userInfo) {
-        let newName = existing.name; // Default to existing
-        const { nickname, given_name, family_name, name } = userInfo;
+        if (userInfo) {
+          let newName = existing.name; // Default to existing
+          const { nickname, given_name, family_name, name } = userInfo;
 
-        if (nickname) {
-          newName = nickname;
-        } else if (given_name) {
-          newName = given_name;
-          if (family_name) {
-            newName += ` ${family_name}`;
+          if (nickname) {
+            newName = nickname;
+          } else if (given_name) {
+            newName = given_name;
+            if (family_name) {
+              newName += ` ${family_name}`;
+            }
+          } else if (name) {
+            newName = name;
           }
-        } else if (name) {
-          newName = name;
+
+          await db("users").where({ id: existing.id }).update({
+            name: newName,
+            last_synced_at: new Date(),
+          });
+
+          return db("users").where({ id: existing.id }).first();
         }
-
-        await db("users").where({ id: existing.id }).update({
-          name: newName,
-          last_synced_at: new Date(),
-        });
-
-        return db("users").where({ id: existing.id }).first();
+      } catch (e) {
+        console.warn(`DEBUG: Failed to sync user info (ignoring): ${e.message}`);
       }
     }
     return existing;
+
   }
 
   const isFirstUser = (await db("users").count("id as count").first()).count === 0;
@@ -125,20 +131,24 @@ async function getOrCreateUser(auth) {
   let lastSyncedAt = null;
 
   if (auth.accessToken && auth.issuer) {
-    const userInfo = await fetchUserInfo(auth.issuer, auth.accessToken);
-    if (userInfo) {
-      lastSyncedAt = new Date();
-      const { nickname, given_name, family_name, name } = userInfo;
-      if (nickname) {
-        initialName = nickname;
-      } else if (given_name) {
-        initialName = given_name;
-        if (family_name) {
-          initialName += ` ${family_name}`;
+    try {
+      const userInfo = await fetchUserInfo(auth.issuer, auth.accessToken);
+      if (userInfo) {
+        lastSyncedAt = new Date();
+        const { nickname, given_name, family_name, name } = userInfo;
+        if (nickname) {
+          initialName = nickname;
+        } else if (given_name) {
+          initialName = given_name;
+          if (family_name) {
+            initialName += ` ${family_name}`;
+          }
+        } else if (name) {
+          initialName = name;
         }
-      } else if (name) {
-        initialName = name;
       }
+    } catch (e) {
+      console.warn(`DEBUG: Failed to fetch initial user info (using fallback): ${e.message}`);
     }
   }
 
