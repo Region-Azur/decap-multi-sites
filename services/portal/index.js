@@ -1,14 +1,6 @@
 const crypto = require("crypto");
 const express = require("express");
 const { createDb, ensureSchema } = require("./shared/db");
-const dns = require("dns");
-
-try {
-  dns.setServers(["8.8.8.8", "1.1.1.1"]);
-  console.log("DNS servers set to 8.8.8.8, 1.1.1.1");
-} catch (e) {
-  console.warn("Failed to set custom DNS servers:", e);
-}
 
 const PORT = Number(process.env.PORTAL_PORT || 3000);
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -64,10 +56,11 @@ async function getAuthInfo(req) {
   const sub = req.header("x-auth-request-user") || req.header("x-forwarded-user");
   const emailHeader = req.header("x-auth-request-email") || req.header("x-forwarded-email");
   const preferredUsername = req.header("x-auth-request-preferred-username") || req.header("x-forwarded-preferred-username");
+  const nameHeader = req.header("x-auth-request-name") || req.header("x-forwarded-name");
   const accessToken = req.header("x-auth-request-access-token") || req.header("x-forwarded-access-token");
 
   let email = normalizeEmail(emailHeader) || normalizeEmail(preferredUsername);
-  let name = preferredUsername || sub || emailHeader;
+  let name = nameHeader || preferredUsername || sub || emailHeader;
 
   console.log(`DEBUG: Extracted auth info: issuer=${issuer}, sub=${sub}, email=${email}, name=${name}`);
 
@@ -468,10 +461,21 @@ app.get("/admin/:siteId", async (req, res) => {
     return;
   }
 
-  // Create a token for this session
-  const token = crypto.randomUUID();
+  // Create a token for this session (fake JWT format so Decap/netlify-cms accepts it)
+  // Decap CMS checks for 3 parts header.payload.signature and checks exp in payload
+  const base64Url = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+  const header = base64Url({ alg: "HS256", typ: "JWT" });
+  const payload = base64Url({
+    sub: user.id,
+    email: user.email,
+    exp: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year expiry
+  });
+  const signature = "dummy_signature";
+  const token = `${header}.${payload}.${signature}`;
+
   await db("api_tokens").insert({
-    token,
+    token, // We store the full token string to match exactly
     user_id: user.id,
     created_at: new Date().toISOString()
   });

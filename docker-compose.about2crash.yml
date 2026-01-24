@@ -10,7 +10,7 @@ services:
       - OAUTH2_PROXY_EMAIL_DOMAINS=*
       - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid email name}
       - OAUTH2_PROXY_REDIRECT_URL=${OAUTH2_PROXY_REDIRECT_URL}
-      - OAUTH2_PROXY_UPSTREAMS=http://api:4000/,http://portal:3000/
+      - OAUTH2_PROXY_UPSTREAMS=http://api:4000/api/,http://portal:3000/
       - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
       - OAUTH2_PROXY_SET_XAUTHREQUEST=true
       - OAUTH2_PROXY_PASS_USER_HEADERS=true
@@ -37,9 +37,6 @@ services:
       - HITOBITO_OIDC_ISSUER=${HITOBITO_OIDC_ISSUER}
     volumes:
       - sqlite_data:/data
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
     restart: unless-stopped
     networks:
       - backend
