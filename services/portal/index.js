@@ -455,21 +455,10 @@ function renderDecapShell(siteId, token) {
                     mockUser.email = user.email;
                     mockUser.user_metadata.full_name = user.name;
                     
-                    const userData = {
-                        backendName: 'git-gateway',
-                        token: '${token}', 
-                        name: user.name,
-                        email: user.email,
-                        avatar_url: user.avatar_url,
-                        id: user.id,
-                        login: user.login,
-                        // Enhanced fields for GoTrue compatibility
-                        user_metadata: { full_name: user.name },
-                        app_metadata: { provider: 'email' }
-                    };
-                    localStorage.setItem('decap-cms-user', JSON.stringify(userData));
-                    localStorage.setItem('netlify-cms-user', JSON.stringify(userData));
-                    console.log("Auto-login credentials set in localStorage.");
+                    // We do NOT seed localStorage manually anymore.
+                    // We let the netlifyIdentity mock handle the "presence" of the user.
+                    // Decap will call netlifyIdentity.currentUser() and then authenticate properly.
+                    console.log("Mock user updated with fetched data.");
                 } else {
                     console.error("Fetch /api/user failed: " + await res.text());
                 }
