@@ -505,9 +505,6 @@ function renderDecapShell(site, token) {
          } else {
             console.error("CMS global not found!");
          }
-         } else {
-            console.error("CMS global not found!");
-         }
       });
     </script>
   </body>
