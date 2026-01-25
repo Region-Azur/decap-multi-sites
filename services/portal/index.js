@@ -500,7 +500,7 @@ function renderDecapShell(site, token) {
             };
 
             console.log("Initializing CMS with manual config...", config);
-            window.CMS.init({ config });
+            window.CMS.init({ config, load_config_file: false });
             
          } else {
             console.error("CMS global not found!");

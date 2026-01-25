@@ -432,6 +432,56 @@ router.delete("/sites/:siteId/contents", async (req, res) => {
   res.json(response.data);
 });
 
+// Generic GitHub Proxy for Git Gateway
+// Proxies requests from /.netlify/git/github/* to https://api.github.com/*
+router.all("/github/*", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return; // requireUser handles 401
+
+  const path = req.params[0]; // Capture the * part
+  const method = req.method;
+  const body = req.body;
+
+  console.log(`DEBUG: Proxying GitHub request: ${method} /${path}`);
+
+  // Basic security check: ensure user has access to the repo they are trying to access
+  if (!user.is_admin) {
+    const match = path.match(/^repos\/([^/]+)\/([^/]+)/);
+    if (match) {
+      const owner = match[1];
+      const repo = match[2];
+      const fullRepo = `${owner}/${repo}`;
+
+      const permittedSite = await db("sites")
+        .join("site_permissions", "sites.id", "site_permissions.site_id")
+        .where({
+          "site_permissions.user_id": user.id,
+          "sites.github_repo": fullRepo,
+          "sites.enabled": true
+        })
+        .first();
+
+      if (!permittedSite) {
+        console.log(`DEBUG: Proxy denied for ${user.email} -> ${fullRepo}`);
+        res.status(403).json({ error: "Forbidden: You do not have access to this repository." });
+        return;
+      }
+    }
+  }
+
+  try {
+    const octokit = await getOctokit();
+    const response = await octokit.request(`${method} /${path}`, {
+      data: body,
+    });
+
+    res.status(response.status).json(response.data);
+  } catch (err) {
+    console.error(`DEBUG: Proxy error: ${err.message}`);
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 app.use("/", router);
 app.use("/api", router);
 app.use("/.netlify/git", router);
