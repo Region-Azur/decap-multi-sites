@@ -398,8 +398,12 @@ function renderDecapShell(siteId, token) {
   <head>
     <meta charset="utf-8" />
     <title>Decap CMS - ${siteId}</title>
-    <link rel="cms-config-url" href="/configs/${siteId}.yml" type="text/yaml" />
+    <title>Decap CMS - ${siteId}</title>
     <script>window.CMS_MANUAL_INIT = true;</script>
+    <style>
+      /* Optional: Hide Netlify Identity Widget default button if it appears */
+      div[class^="netlify-identity-menu"] { display: none; }
+    </style>
   </head>
   <body>
     <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
@@ -449,17 +453,19 @@ function renderDecapShell(siteId, token) {
                 
                 if (res.ok) {
                     const user = await res.json();
-                    console.log("User data received:", user);
                     
                     // Update mock user with real data
                     mockUser.id = user.id;
                     mockUser.email = user.email;
                     mockUser.user_metadata.full_name = user.name;
                     
-                    // We do NOT seed localStorage manually anymore.
-                    // We let the netlifyIdentity mock handle the "presence" of the user.
-                    // Decap will call netlifyIdentity.currentUser() and then authenticate properly.
-                    console.log("Mock user updated with fetched data.");
+                    console.log("Mock user ready. Firing login event...");
+                    
+                    // Fire login event to authenticate CMS
+                    // We do this AFTER CMS.init() has run below
+                     if (window.netlifyIdentity.onLogin) {
+                        window.netlifyIdentity.onLogin(mockUser);
+                     }
                 } else {
                     console.error("Fetch /api/user failed: " + await res.text());
                 }
@@ -467,7 +473,37 @@ function renderDecapShell(siteId, token) {
                 console.error("Auto-login exception", e);
             }
 
-            window.CMS.init();
+            // Manually Initialize CMS with Config Object
+            const config = {
+                backend: {
+                    name: 'git-gateway',
+                    api_root: '${API_BASE_URL}/.netlify/git',
+                    repo: '${site.github_repo}', 
+                    branch: '${site.branch}',
+                    squash_merges: true
+                },
+                media_folder: '${site.media_path}',
+                public_folder: '${site.media_path}',
+                collections: [
+                    {
+                        name: "pages",
+                        label: "Pages",
+                        folder: "${site.content_path}",
+                        create: true,
+                        fields: [
+                            {label: "Title", name: "title", widget: "string"},
+                            {label: "Body", name: "body", widget: "markdown"}
+                        ]
+                    }
+                ]
+            };
+
+            console.log("Initializing CMS with manual config...", config);
+            window.CMS.init({ config });
+            
+         } else {
+            console.error("CMS global not found!");
+         }
          } else {
             console.error("CMS global not found!");
          }
