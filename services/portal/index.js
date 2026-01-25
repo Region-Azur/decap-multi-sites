@@ -425,7 +425,8 @@ function renderDecapShell(siteId, token) {
               currentUser: () => mockUser,
               on: (event, cb) => {
                   if (event === 'login') {
-                      setTimeout(() => cb(mockUser), 10);
+                      // Give CMS a moment to initialize backend before firing login
+                      setTimeout(() => cb(mockUser), 500);
                   }
               },
               close: () => {},
@@ -582,7 +583,7 @@ app.get("/configs/:siteId.yml", async (req, res) => {
     return;
   }
 
-  const config = `backend:\n  name: git-gateway\n  api_root: ${API_BASE_URL}/api\n  repo: ${site.github_repo}\n  branch: ${site.branch}\nmedia_folder: ${site.media_path}\npublic_folder: ${site.media_path}\ncollections:\n  - name: "pages"\n    label: "Pages"\n    folder: "${site.content_path}"\n    create: true\n    fields:\n      - {label: "Title", name: "title", widget: "string"}\n      - {label: "Body", name: "body", widget: "markdown"}\n`;
+  const config = `backend:\n  name: git-gateway\n  api_root: ${API_BASE_URL}/.netlify/git\n  repo: ${site.github_repo}\n  branch: ${site.branch}\nmedia_folder: ${site.media_path}\npublic_folder: ${site.media_path}\ncollections:\n  - name: "pages"\n    label: "Pages"\n    folder: "${site.content_path}"\n    create: true\n    fields:\n      - {label: "Title", name: "title", widget: "string"}\n      - {label: "Body", name: "body", widget: "markdown"}\n`;
   res.type("text/yaml").send(config);
 });
 
