@@ -124,14 +124,17 @@ async function getOrCreateUser(auth) {
 
         if (userInfo) {
           let newName = existing.name; // Default to existing
-          const { nickname, given_name, family_name, name } = userInfo;
+          const nickname = userInfo.nickname;
+          const givenName = userInfo.given_name || userInfo.first_name;
+          const familyName = userInfo.family_name || userInfo.last_name;
+          const name = userInfo.name;
 
           if (nickname) {
             newName = nickname;
-          } else if (given_name) {
-            newName = given_name;
-            if (family_name) {
-              newName += ` ${family_name}`;
+          } else if (givenName) {
+            newName = givenName;
+            if (familyName) {
+              newName += ` ${familyName}`;
             }
           } else if (name) {
             newName = name;
