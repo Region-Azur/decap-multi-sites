@@ -392,7 +392,8 @@ function renderAdminPanel(user, sites, users) {
 </html>`;
 }
 
-function renderDecapShell(siteId, token) {
+function renderDecapShell(site, token) {
+  const siteId = site.id;
   return `<!doctype html>
 <html>
   <head>
@@ -588,7 +589,13 @@ app.get("/admin/:siteId", async (req, res) => {
     created_at: new Date().toISOString()
   });
 
-  res.type("html").send(renderDecapShell(siteId, token));
+  const site = await db("sites").where({ id: siteId }).first();
+  if (!site) {
+    res.status(404).send("Site not found");
+    return;
+  }
+
+  res.type("html").send(renderDecapShell(site, token));
 });
 
 app.get("/configs/:siteId.yml", async (req, res) => {
