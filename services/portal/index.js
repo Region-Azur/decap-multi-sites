@@ -138,7 +138,7 @@ async function getOrCreateUser(auth) {
             last_synced_at: new Date(),
           });
 
-          return db("users").where({ id: existing.id }).first();
+          return { ...existing, name: newName };
         }
       } catch (e) {
         console.warn(`DEBUG: Failed to sync user info (ignoring): ${e.message}`);
