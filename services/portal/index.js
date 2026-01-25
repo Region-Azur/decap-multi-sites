@@ -53,6 +53,15 @@ async function getAuthInfo(req) {
   // Log all headers for debugging purposes
   console.log("DEBUG: Incoming headers:", JSON.stringify(req.headers, null, 2));
 
+  // Helper to parse JWT payload
+  const parseJwt = (token) => {
+    try {
+      return JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+    } catch (e) {
+      return null;
+    }
+  };
+
   const issuer = req.header("x-auth-request-issuer") || DEFAULT_OIDC_ISSUER;
 
   // Try X-Auth-Request headers first, then fall back to X-Forwarded headers
@@ -61,9 +70,26 @@ async function getAuthInfo(req) {
   const preferredUsername = req.header("x-auth-request-preferred-username") || req.header("x-forwarded-preferred-username");
   const nameHeader = req.header("x-auth-request-name") || req.header("x-forwarded-name");
   const accessToken = req.header("x-auth-request-access-token") || req.header("x-forwarded-access-token");
+  const idToken = req.header("x-auth-request-id-token") || req.header("x-forwarded-id-token");
 
   let email = normalizeEmail(emailHeader) || normalizeEmail(preferredUsername);
   let name = nameHeader || preferredUsername || sub || emailHeader;
+
+  // Attempt to extract better name from ID Token if available
+  if (idToken) {
+    const claims = parseJwt(idToken);
+    if (claims) {
+      console.log("DEBUG: ID Token claims:", JSON.stringify(claims, null, 2));
+      if (claims.name) {
+        name = claims.name;
+      } else if (claims.nickname) {
+        name = claims.nickname;
+      } else if (claims.given_name) {
+        name = claims.given_name;
+        if (claims.family_name) name += ` ${claims.family_name}`;
+      }
+    }
+  }
 
   console.log(`DEBUG: Extracted auth info: issuer=${issuer}, sub=${sub}, email=${email}, name=${name}`);
 
