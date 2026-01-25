@@ -113,7 +113,11 @@ async function getOrCreateUser(auth) {
     .first();
 
   if (existing) {
-    if (auth.accessToken && auth.issuer && (!existing.last_synced_at || Date.now() - new Date(existing.last_synced_at).getTime() > 24 * 60 * 60 * 1000)) {
+    // Force sync if name looks like an ID (matches sub) or it's been 24h
+    const nameIsId = existing.name === existing.oidc_sub || existing.name === auth.sub;
+    const shouldSync = auth.accessToken && auth.issuer && (nameIsId || !existing.last_synced_at || Date.now() - new Date(existing.last_synced_at).getTime() > 24 * 60 * 60 * 1000);
+
+    if (shouldSync) {
       console.log(`DEBUG: Syncing user info for ${auth.email}`);
       try {
         const userInfo = await fetchUserInfo(auth.issuer, auth.accessToken);
