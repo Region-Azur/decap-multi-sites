@@ -440,39 +440,6 @@ function renderDecapShell(site, token) {
 
          if (window.CMS) {
             console.log("Initializing CMS...");
-            
-            // Auto-login attempt: Verify session with backend and seed local storage
-            try {
-                console.log("Fetching /api/user...");
-                // Pass the token in the header to authenticate with the API
-                const res = await fetch('/api/user', {
-                    headers: {
-                        'Authorization': 'Bearer ${token}'
-                    }
-                });
-                console.log("Fetch / api / user status: " + res.status);
-                
-                if (res.ok) {
-                    const user = await res.json();
-                    
-                    // Update mock user with real data
-                    mockUser.id = user.id;
-                    mockUser.email = user.email;
-                    mockUser.user_metadata.full_name = user.name;
-                    
-                    console.log("Mock user ready. Firing login event...");
-                    
-                    // Fire login event to authenticate CMS
-                    // We do this AFTER CMS.init() has run below
-                     if (window.netlifyIdentity.onLogin) {
-                        window.netlifyIdentity.onLogin(mockUser);
-                     }
-                } else {
-                    console.error("Fetch /api/user failed: " + await res.text());
-                }
-            } catch (e) {
-                console.error("Auto-login exception", e);
-            }
 
             // Manually Initialize CMS with Config Object
             const config = {
@@ -502,6 +469,39 @@ function renderDecapShell(site, token) {
             console.log("Initializing CMS with manual config...", config);
             window.CMS.init({ config, load_config_file: false });
             
+            // Auto-login attempt: Verify session with backend and seed local storage
+            try {
+                console.log("Fetching /api/user...");
+                // Pass the token in the header to authenticate with the API
+                const res = await fetch('/api/user', {
+                    headers: {
+                        'Authorization': 'Bearer ${token}'
+                    }
+                });
+                console.log("Fetch / api / user status: " + res.status);
+                
+                if (res.ok) {
+                    const user = await res.json();
+                    
+                    // Update mock user with real data
+                    mockUser.id = user.id;
+                    mockUser.email = user.email;
+                    mockUser.user_metadata.full_name = user.name;
+                    
+                    console.log("Mock user ready. Firing login event...");
+                    
+                    // Fire login event to authenticate CMS
+                    // We do this AFTER CMS.init() has run above
+                     if (window.netlifyIdentity.onLogin) {
+                        window.netlifyIdentity.onLogin(mockUser);
+                     }
+                } else {
+                    console.error("Fetch /api/user failed: " + await res.text());
+                }
+            } catch (e) {
+                console.error("Auto-login exception", e);
+            }
+
          } else {
             console.error("CMS global not found!");
          }
