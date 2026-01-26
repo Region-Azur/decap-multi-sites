@@ -444,7 +444,9 @@ function renderDecapShell(site, token) {
           },
           close: () => { console.log("Netlify Identity Widget closed."); },
           logout: () => { console.log("Netlify Identity Widget logout."); },
-          open: () => { console.log("Netlify Identity Open called (Mock)"); }
+          open: () => { console.log("Netlify Identity Open called (Mock)"); },
+          init: () => { console.log("Netlify Identity Init called (Mock)"); },
+          refresh: () => Promise.resolve("${token}")
       };
     </script>
   </head>
