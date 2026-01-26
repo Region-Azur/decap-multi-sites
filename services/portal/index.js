@@ -446,10 +446,15 @@ function renderDecapShell(site, token) {
                 backend: {
                     name: 'git-gateway',
                     api_root: '${API_BASE_URL}/.netlify/git',
+                    gateway_url: '${API_BASE_URL}/.netlify/git', // Legacy fallback
                     repo: '${site.github_repo}', 
                     branch: '${site.branch}',
                     squash_merges: true
                 },
+                site_url: '${API_BASE_URL}',
+                display_url: '${API_BASE_URL}',
+                logo_url: 'https://decapcms.org/img/decap-logo.svg',
+                locale: 'en',
                 media_folder: '${site.media_path}',
                 public_folder: '${site.media_path}',
                 collections: [
@@ -593,6 +598,11 @@ app.get("/admin/:siteId", async (req, res) => {
   }
 
   res.type("html").send(renderDecapShell(site, token));
+});
+
+app.get("/admin/config.yml", (_req, res) => {
+  // Return empty config or 404 to stop CMS from complaining about 403
+  res.status(404).send("Manual init used");
 });
 
 app.get("/configs/:siteId.yml", async (req, res) => {
