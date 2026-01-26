@@ -438,6 +438,16 @@ function renderDecapShell(site, token) {
                       window.netlifyIdentity._listeners[event] = [];
                   }
                   window.netlifyIdentity._listeners[event].push(cb);
+                  
+                  // If we are already logged in and a new listener arrives, fire it immediately!
+                  if (event === 'login' && isUserReady) {
+                      console.log("Late listener registered. Firing immediately.");
+                      try {
+                          cb(mockUser);
+                      } catch (err) {
+                          console.error("Error in late login listener:", err);
+                      }
+                  }
               },
               close: () => { console.log("Netlify Identity Widget closed."); },
               logout: () => { console.log("Netlify Identity Widget logout."); },
