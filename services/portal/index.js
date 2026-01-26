@@ -432,16 +432,15 @@ function renderDecapShell(site, token) {
 
           window.netlifyIdentity = {
               currentUser: () => isUserReady ? mockUser : null,
+              _listeners: { login: [] },
               on: (event, cb) => {
-                  if (event === 'login') {
-                      // Login event fired manually later
-                      // We store the cb to call it when ready if needed, 
-                      // but mostly we rely on the manual trigger below.
-                      window.netlifyIdentity.onLogin = cb;
+                  if (!window.netlifyIdentity._listeners[event]) {
+                      window.netlifyIdentity._listeners[event] = [];
                   }
+                  window.netlifyIdentity._listeners[event].push(cb);
               },
-              close: () => {},
-              logout: () => {},
+              close: () => { console.log("Netlify Identity Widget closed."); },
+              logout: () => { console.log("Netlify Identity Widget logout."); },
               open: () => { console.log("Netlify Identity Open called (Mock)"); }
           };
 
@@ -505,9 +504,16 @@ function renderDecapShell(site, token) {
                     
                     // Fire login event to authenticate CMS
                     // We do this AFTER CMS.init() has run above
-                     if (window.netlifyIdentity.onLogin) {
-                        window.netlifyIdentity.onLogin(mockUser);
-                     }
+                    if (window.netlifyIdentity._listeners.login) {
+                        console.log("Firing " + window.netlifyIdentity._listeners.login.length + " login listeners...");
+                        window.netlifyIdentity._listeners.login.forEach(cb => {
+                            try {
+                                cb(mockUser);
+                            } catch (err) {
+                                console.error("Error in login listener:", err);
+                            }
+                        });
+                    }
                 } else {
                     console.error("Fetch /api/user failed: " + await res.text());
                 }
