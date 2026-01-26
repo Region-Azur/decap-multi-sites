@@ -411,6 +411,7 @@ function renderDecapShell(site, token) {
     <script>
       document.addEventListener("DOMContentLoaded", async function() {
           // MOCK Netlify Identity for Decap CMS
+          // We intentionally hardcode jwt to return the token available in this scope
           const mockUser = {
               url: "${API_BASE_URL}",
               token: {
@@ -423,19 +424,24 @@ function renderDecapShell(site, token) {
               email: "auto-login@example.com", 
               user_metadata: { full_name: "Auto User" },
               app_metadata: { provider: "email" },
-              jwt: function() { return Promise.resolve(this.token.access_token); }
+              // Robust JWT function that doesn't rely on 'this'
+              jwt: () => Promise.resolve("${token}"),
+              logout: () => Promise.resolve()
           };
 
           window.netlifyIdentity = {
               currentUser: () => mockUser,
               on: (event, cb) => {
                   if (event === 'login') {
-                      // Give CMS a moment to initialize backend before firing login
-                      setTimeout(() => cb(mockUser), 500);
+                      // Login event fired manually later
+                      // We store the cb to call it when ready if needed, 
+                      // but mostly we rely on the manual trigger below.
+                      window.netlifyIdentity.onLogin = cb;
                   }
               },
               close: () => {},
-              logout: () => {}
+              logout: () => {},
+              open: () => { console.log("Netlify Identity Open called (Mock)"); }
           };
 
          if (window.CMS) {
