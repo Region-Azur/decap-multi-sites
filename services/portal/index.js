@@ -513,17 +513,28 @@ function renderDecapShell(site, token) {
                     console.log("Mock user ready. Firing login event...");
                     
                     // Fire login event to authenticate CMS
-                    // We do this AFTER CMS.init() has run above
-                    if (window.netlifyIdentity._listeners.login) {
-                        console.log("Firing " + window.netlifyIdentity._listeners.login.length + " login listeners...");
-                        window.netlifyIdentity._listeners.login.forEach(cb => {
-                            try {
-                                cb(mockUser);
-                            } catch (err) {
-                                console.error("Error in login listener:", err);
+                    // We need to ensure the CMS has actually registered its listener
+                    const fireLogin = (attempt = 1) => {
+                        if (window.netlifyIdentity._listeners.login && window.netlifyIdentity._listeners.login.length > 0) {
+                            console.log("Firing " + window.netlifyIdentity._listeners.login.length + " login listeners (Attempt " + attempt + ")...");
+                            window.netlifyIdentity._listeners.login.forEach(cb => {
+                                try {
+                                    cb(mockUser);
+                                } catch (err) {
+                                    console.error("Error in login listener:", err);
+                                }
+                            });
+                        } else {
+                            if (attempt <= 20) {
+                                console.log("No login listeners yet (Attempt " + attempt + "). Retrying in 500ms...");
+                                setTimeout(() => fireLogin(attempt + 1), 500);
+                            } else {
+                                console.warn("Max retries reached. CMS did not register login listener.");
                             }
-                        });
-                    }
+                        }
+                    };
+                    
+                    fireLogin();
                 } else {
                     console.error("Fetch /api/user failed: " + await res.text());
                 }
