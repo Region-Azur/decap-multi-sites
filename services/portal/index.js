@@ -558,6 +558,11 @@ app.get("/", handleAdminHome);
 app.get("/admin", handleAdminHome);
 app.get("/admin-panel", handleAdminPanel);
 
+app.get("/admin/config.yml", (_req, res) => {
+  // Return minimal valid config to satisfy CMS if manual init fallback fails
+  res.type("text/yaml").send("backend:\n  name: git-gateway\n");
+});
+
 app.get("/admin/:siteId", async (req, res) => {
   const auth = await getAuthInfo(req);
   if (!auth) {
@@ -600,10 +605,7 @@ app.get("/admin/:siteId", async (req, res) => {
   res.type("html").send(renderDecapShell(site, token));
 });
 
-app.get("/admin/config.yml", (_req, res) => {
-  // Return empty config or 404 to stop CMS from complaining about 403
-  res.status(404).send("Manual init used");
-});
+
 
 app.get("/configs/:siteId.yml", async (req, res) => {
   console.log(`DEBUG: Config request for ${req.params.siteId}`);
