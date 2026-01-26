@@ -407,9 +407,12 @@ function renderDecapShell(site, token) {
     </style>
     <script>
       // Hoist Netlify Identity Mock to HEAD so it exists before Decap CMS loads
-      window.isUserReady = false;
       window.mockUser = {
           url: "${API_BASE_URL}",
+          backend: { name: "git-gateway" },
+          api: {
+            request: (path) => { console.log("Mock API Request:", path); return Promise.resolve(); }
+          },
           token: {
               access_token: "${token}",
               refresh_token: "dummy-refresh-token",
@@ -464,6 +467,7 @@ function renderDecapShell(site, token) {
                 backend: {
                     name: 'git-gateway',
                     api_root: '${API_BASE_URL}/.netlify/git',
+                    gateway_url: '${API_BASE_URL}/.netlify/git', // Legacy fallback restored
                     repo: '${site.github_repo}', 
                     branch: '${site.branch}',
                     squash_merges: true
@@ -491,7 +495,7 @@ function renderDecapShell(site, token) {
             console.log("Initializing CMS with manual config...", config);
             window.CMS.init({ config, load_config_file: false });
             
-            // Allow CMS initialization to settle before attempting auth flow
+            // Allow CMS initialization to settle/hydrate before attempting auth flow
             setTimeout(async () => {
                 // Auto-login attempt: Verify session with backend and seed local storage
                 try {
