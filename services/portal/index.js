@@ -407,22 +407,22 @@ function renderDecapShell(site, token) {
     </style>
     <script>
       // Hoist Netlify Identity Mock to HEAD so it exists before Decap CMS loads
-      let isUserReady = false;
-      const mockUser = {
-          url: "${API_BASE_URL}",
-          token: {
-              access_token: "${token}",
-              token_type: "Bearer",
-              expires_in: 3600,
-              expires_at: Date.now() + 3600000
-          },
-          id: "user-id",
-          email: "auto-login@example.com", 
-          user_metadata: { full_name: "Auto User" },
-          app_metadata: { provider: "email" },
-          jwt: () => Promise.resolve("${token}"),
-          logout: () => Promise.resolve()
-      };
+          const mockUser = {
+              url: "${API_BASE_URL}",
+              token: {
+                  access_token: "${token}",
+                  refresh_token: "dummy-refresh-token",
+                  token_type: "Bearer",
+                  expires_in: 3600,
+                  expires_at: Date.now() + 3600000
+              },
+              id: "user-id",
+              email: "auto-login@example.com", 
+              user_metadata: { full_name: "Auto User" },
+              app_metadata: { provider: "email" },
+              jwt: (force) => Promise.resolve("${token}"),
+              logout: () => Promise.resolve()
+          };
 
       window.netlifyIdentity = {
           currentUser: () => isUserReady ? mockUser : null,
@@ -463,7 +463,6 @@ function renderDecapShell(site, token) {
                 backend: {
                     name: 'git-gateway',
                     api_root: '${API_BASE_URL}/.netlify/git',
-                    gateway_url: '${API_BASE_URL}/.netlify/git', // Legacy fallback
                     repo: '${site.github_repo}', 
                     branch: '${site.branch}',
                     squash_merges: true
