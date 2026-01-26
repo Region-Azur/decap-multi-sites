@@ -405,55 +405,54 @@ function renderDecapShell(site, token) {
       /* Optional: Hide Netlify Identity Widget default button if it appears */
       div[class^="netlify-identity-menu"] { display: none; }
     </style>
+    <script>
+      // Hoist Netlify Identity Mock to HEAD so it exists before Decap CMS loads
+      let isUserReady = false;
+      const mockUser = {
+          url: "${API_BASE_URL}",
+          token: {
+              access_token: "${token}",
+              token_type: "Bearer",
+              expires_in: 3600,
+              expires_at: Date.now() + 3600000
+          },
+          id: "user-id",
+          email: "auto-login@example.com", 
+          user_metadata: { full_name: "Auto User" },
+          app_metadata: { provider: "email" },
+          jwt: () => Promise.resolve("${token}"),
+          logout: () => Promise.resolve()
+      };
+
+      window.netlifyIdentity = {
+          currentUser: () => isUserReady ? mockUser : null,
+          _listeners: { login: [] },
+          on: (event, cb) => {
+              if (!window.netlifyIdentity._listeners[event]) {
+                  window.netlifyIdentity._listeners[event] = [];
+              }
+              window.netlifyIdentity._listeners[event].push(cb);
+              
+              if (event === 'login' && isUserReady) {
+                  console.log("Late listener registered. Firing immediately.");
+                  try {
+                      cb(mockUser);
+                  } catch (err) {
+                      console.error("Error in late login listener:", err);
+                  }
+              }
+          },
+          close: () => { console.log("Netlify Identity Widget closed."); },
+          logout: () => { console.log("Netlify Identity Widget logout."); },
+          open: () => { console.log("Netlify Identity Open called (Mock)"); }
+      };
+    </script>
   </head>
+
   <body>
     <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", async function() {
-          let isUserReady = false;
-          // MOCK Netlify Identity for Decap CMS
-          // We intentionally hardcode jwt to return the token available in this scope
-          const mockUser = {
-              url: "${API_BASE_URL}",
-              token: {
-                  access_token: "${token}",
-                  token_type: "Bearer",
-                  expires_in: 3600,
-                  expires_at: Date.now() + 3600000
-              },
-              id: "user-id",
-              email: "auto-login@example.com", 
-              user_metadata: { full_name: "Auto User" },
-              app_metadata: { provider: "email" },
-              // Robust JWT function that doesn't rely on 'this'
-              jwt: () => Promise.resolve("${token}"),
-              logout: () => Promise.resolve()
-          };
-
-          window.netlifyIdentity = {
-              currentUser: () => isUserReady ? mockUser : null,
-              _listeners: { login: [] },
-              on: (event, cb) => {
-                  if (!window.netlifyIdentity._listeners[event]) {
-                      window.netlifyIdentity._listeners[event] = [];
-                  }
-                  window.netlifyIdentity._listeners[event].push(cb);
-                  
-                  // If we are already logged in and a new listener arrives, fire it immediately!
-                  if (event === 'login' && isUserReady) {
-                      console.log("Late listener registered. Firing immediately.");
-                      try {
-                          cb(mockUser);
-                      } catch (err) {
-                          console.error("Error in late login listener:", err);
-                      }
-                  }
-              },
-              close: () => { console.log("Netlify Identity Widget closed."); },
-              logout: () => { console.log("Netlify Identity Widget logout."); },
-              open: () => { console.log("Netlify Identity Open called (Mock)"); }
-          };
-
          if (window.CMS) {
             console.log("Initializing CMS...");
 
