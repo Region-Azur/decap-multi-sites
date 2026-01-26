@@ -491,9 +491,11 @@ function renderDecapShell(site, token) {
             console.log("Initializing CMS with manual config...", config);
             window.CMS.init({ config, load_config_file: false });
             
-            // Auto-login attempt: Verify session with backend and seed local storage
-            try {
-                console.log("Fetching /api/user...");
+            // Allow CMS initialization to settle before attempting auth flow
+            setTimeout(async () => {
+                // Auto-login attempt: Verify session with backend and seed local storage
+                try {
+                    console.log("Fetching /api/user...");
                 // Pass the token in the header to authenticate with the API
                 const res = await fetch('/api/user', {
                     headers: {
