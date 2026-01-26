@@ -407,25 +407,26 @@ function renderDecapShell(site, token) {
     </style>
     <script>
       // Hoist Netlify Identity Mock to HEAD so it exists before Decap CMS loads
-          const mockUser = {
-              url: "${API_BASE_URL}",
-              token: {
-                  access_token: "${token}",
-                  refresh_token: "dummy-refresh-token",
-                  token_type: "Bearer",
-                  expires_in: 3600,
-                  expires_at: Date.now() + 3600000
-              },
-              id: "user-id",
-              email: "auto-login@example.com", 
-              user_metadata: { full_name: "Auto User" },
-              app_metadata: { provider: "email" },
-              jwt: (force) => Promise.resolve("${token}"),
-              logout: () => Promise.resolve()
-          };
+      window.isUserReady = false;
+      window.mockUser = {
+          url: "${API_BASE_URL}",
+          token: {
+              access_token: "${token}",
+              refresh_token: "dummy-refresh-token",
+              token_type: "Bearer",
+              expires_in: 3600,
+              expires_at: Date.now() + 3600000
+          },
+          id: "user-id",
+          email: "auto-login@example.com", 
+          user_metadata: { full_name: "Auto User" },
+          app_metadata: { provider: "email" },
+          jwt: (force) => Promise.resolve("${token}"),
+          logout: () => Promise.resolve()
+      };
 
       window.netlifyIdentity = {
-          currentUser: () => isUserReady ? mockUser : null,
+          currentUser: () => window.isUserReady ? window.mockUser : null,
           _listeners: { login: [] },
           on: (event, cb) => {
               if (!window.netlifyIdentity._listeners[event]) {
@@ -433,10 +434,10 @@ function renderDecapShell(site, token) {
               }
               window.netlifyIdentity._listeners[event].push(cb);
               
-              if (event === 'login' && isUserReady) {
+              if (event === 'login' && window.isUserReady) {
                   console.log("Late listener registered. Firing immediately.");
                   try {
-                      cb(mockUser);
+                      cb(window.mockUser);
                   } catch (err) {
                       console.error("Error in late login listener:", err);
                   }
@@ -507,11 +508,13 @@ function renderDecapShell(site, token) {
                     const user = await res.json();
                     
                     // Update mock user with real data
-                    mockUser.id = user.id;
-                    mockUser.email = user.email;
-                    mockUser.user_metadata.full_name = user.name;
+                    if (window.mockUser) {
+                        window.mockUser.id = user.id;
+                        window.mockUser.email = user.email;
+                        window.mockUser.user_metadata.full_name = user.name;
+                    }
                     
-                    isUserReady = true;
+                    window.isUserReady = true;
                     console.log("Mock user ready. Firing login event...");
                     
                     // Fire login event to authenticate CMS
@@ -521,7 +524,7 @@ function renderDecapShell(site, token) {
                             console.log("Firing " + window.netlifyIdentity._listeners.login.length + " login listeners (Attempt " + attempt + ")...");
                             window.netlifyIdentity._listeners.login.forEach(cb => {
                                 try {
-                                    cb(mockUser);
+                                    cb(window.mockUser);
                                 } catch (err) {
                                     console.error("Error in login listener:", err);
                                 }
