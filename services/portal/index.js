@@ -410,6 +410,7 @@ function renderDecapShell(site, token) {
     <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", async function() {
+          let isUserReady = false;
           // MOCK Netlify Identity for Decap CMS
           // We intentionally hardcode jwt to return the token available in this scope
           const mockUser = {
@@ -430,7 +431,7 @@ function renderDecapShell(site, token) {
           };
 
           window.netlifyIdentity = {
-              currentUser: () => mockUser,
+              currentUser: () => isUserReady ? mockUser : null,
               on: (event, cb) => {
                   if (event === 'login') {
                       // Login event fired manually later
@@ -499,6 +500,7 @@ function renderDecapShell(site, token) {
                     mockUser.email = user.email;
                     mockUser.user_metadata.full_name = user.name;
                     
+                    isUserReady = true;
                     console.log("Mock user ready. Firing login event...");
                     
                     // Fire login event to authenticate CMS
