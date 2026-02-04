@@ -608,7 +608,9 @@ router.all("/github/*", async (req, res) => {
     if (finalPath.includes("/contents/") || finalPath.includes("/git/trees/")) {
       console.log(`DEBUG: GitHub Proxy Response for ${finalPath}: Status ${response.status}`);
       if (response.data && response.data.tree) {
-        console.log(`DEBUG: Tree listing: ${response.data.tree.map(f => f.path).join(", ")}`);
+        // Filter out README.md from tree listing to prevent CMS parsing errors
+        response.data.tree = response.data.tree.filter(f => f.path !== "README.md" && !f.path.endsWith("/README.md"));
+        console.log(`DEBUG: Tree listing (filtered): ${response.data.tree.map(f => f.path).join(", ")}`);
       } else if (Array.isArray(response.data)) {
         console.log(`DEBUG: Directory listing: ${response.data.map(f => f.name).join(", ")}`);
       }
@@ -616,6 +618,13 @@ router.all("/github/*", async (req, res) => {
 
     res.status(response.status).json(response.data);
   } catch (err) {
+    // Gracefully handle missing tree/folder (e.g. uploads folder not created yet)
+    if (err.status === 404 && method === "GET" && finalPath.includes("/git/trees/")) {
+      console.log(`DEBUG: Tree/path not found for ${finalPath} (likely empty folder), returning empty tree.`);
+      res.json({ sha: "empty-tree", url: "", tree: [], truncated: false });
+      return;
+    }
+
     // Auto-Recovery: Create branch if missing
     if (err.status === 404 && method === "GET") {
       const branchMatch = finalPath.match(/^repos\/([^/]+)\/([^/]+)\/branches\/([^/]+)$/);
