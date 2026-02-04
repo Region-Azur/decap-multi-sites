@@ -556,6 +556,13 @@ router.all("/github/*", async (req, res) => {
       data: body,
     });
 
+    if (finalPath.includes("/contents/")) {
+      console.log(`DEBUG: GitHub Proxy Response for ${finalPath}: Status ${response.status}`);
+      if (Array.isArray(response.data)) {
+        console.log(`DEBUG: Directory listing contains: ${response.data.map(f => f.name).join(", ")}`);
+      }
+    }
+
     res.status(response.status).json(response.data);
   } catch (err) {
     // Auto-Recovery: Create branch if missing
