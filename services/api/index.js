@@ -68,6 +68,7 @@ async function getAuthInfo(req) {
             sub: user.oidc_sub,
             email: user.email,
             name: user.name,
+            siteId: apiToken.site_id, // Pass site context
             isApiToken: true
           };
         }
@@ -449,14 +450,26 @@ router.all("/github/*", async (req, res) => {
   if (!user) return; // requireUser handles 401
 
   const path = req.params[0]; // Capture the * part
-  const method = req.method;
-  const body = req.body;
+  let method = req.method;
+  let finalPath = path;
 
-  console.log(`DEBUG: Proxying GitHub request: ${method} /${path}`);
+  // Context-aware proxying for generic requests (e.g., /branches/main)
+  if (!path.startsWith("repos/") && !path.startsWith("user")) {
+    if (user.siteId) {
+      const site = await db("sites").where({ id: user.siteId }).first();
+      if (site) {
+        console.log(`DEBUG: Rewriting generic proxy request request for site ${site.id} (${site.github_repo})`);
+        // If requesting branches/main, map to repos/{owner}/{repo}/branches/main
+        finalPath = `repos/${site.github_repo}/${path}`;
+      }
+    }
+  }
+
+  console.log(`DEBUG: Proxying GitHub request: ${method} /${path} -> /${finalPath}`);
 
   // Basic security check: ensure user has access to the repo they are trying to access
   if (!user.is_admin) {
-    const match = path.match(/^repos\/([^/]+)\/([^/]+)/);
+    const match = finalPath.match(/^repos\/([^/]+)\/([^/]+)/);
     if (match) {
       const owner = match[1];
       const repo = match[2];
@@ -481,12 +494,73 @@ router.all("/github/*", async (req, res) => {
 
   try {
     const octokit = await getOctokit();
-    const response = await octokit.request(`${method} /${path}`, {
+    const response = await octokit.request(`${method} /${finalPath}`, {
       data: body,
     });
 
     res.status(response.status).json(response.data);
   } catch (err) {
+    // Auto-Recovery: Create branch if missing
+    if (err.status === 404 && method === "GET") {
+      const branchMatch = finalPath.match(/^repos\/([^/]+)\/([^/]+)\/branches\/([^/]+)$/);
+      if (branchMatch) {
+        const [, owner, repo, branch] = branchMatch;
+        console.log(`DEBUG: Branch ${branch} not found for ${owner}/${repo}. Attempting auto-creation...`);
+
+        try {
+          const octokit = await getOctokit();
+          // Check repo state
+          const { data: repoData } = await octokit.repos.get({ owner, repo });
+
+          let sha = null;
+          if (repoData.size === 0) {
+            console.log(`DEBUG: Repo is empty. Creating Initial Commit...`);
+            // Repo is empty, create README.md to init
+            const { data: commit } = await octokit.repos.createOrUpdateFileContents({
+              owner,
+              repo,
+              path: "README.md",
+              message: "Initial commit by Decap CMS Proxy",
+              content: Buffer.from("# " + repoData.name).toString("base64"),
+              branch
+            });
+            // After creating file, branch exists
+            console.log(`DEBUG: Initialized repo with ${branch} branch.`);
+          } else {
+            // Repo has content, branch missing. Create from default branch.
+            console.log(`DEBUG: Repo not empty. Creating ${branch} from ${repoData.default_branch}...`);
+            // Get SHA of default branch
+            const { data: refData } = await octokit.git.getRef({
+              owner,
+              repo,
+              ref: `heads/${repoData.default_branch}`
+            });
+            sha = refData.object.sha;
+
+            // Create new branch ref
+            await octokit.git.createRef({
+              owner,
+              repo,
+              ref: `refs/heads/${branch}`,
+              sha
+            });
+            console.log(`DEBUG: Created ${branch} pointing to ${sha}`);
+          }
+
+          // Retry the original request
+          const retryResponse = await octokit.request(`${method} /${finalPath}`, {
+            data: body,
+          });
+          res.status(retryResponse.status).json(retryResponse.data);
+          return;
+
+        } catch (recoveryErr) {
+          console.error(`DEBUG: Auto-recovery failed: ${recoveryErr.message}`);
+          // Fall through to return original error
+        }
+      }
+    }
+
     console.error(`DEBUG: Proxy error: ${err.message}`);
     res.status(err.status || 500).json({ error: err.message });
   }

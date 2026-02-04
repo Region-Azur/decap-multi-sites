@@ -89,8 +89,16 @@ async function ensureSchema(db) {
     await db.schema.createTable("api_tokens", (table) => {
       table.string("token").primary();
       table.string("user_id").notNullable();
+      table.string("site_id").nullable(); // Links token to a specific site context
       table.string("created_at").notNullable();
     });
+  } else {
+    const hasSiteId = await db.schema.hasColumn("api_tokens", "site_id");
+    if (!hasSiteId) {
+      await db.schema.table("api_tokens", (table) => {
+        table.string("site_id").nullable();
+      });
+    }
   }
 }
 

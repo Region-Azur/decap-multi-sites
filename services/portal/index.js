@@ -638,6 +638,7 @@ app.get("/admin/:siteId", async (req, res) => {
   await db("api_tokens").insert({
     token, // We store the full token string to match exactly
     user_id: user.id,
+    site_id: siteId,
     created_at: new Date().toISOString()
   });
 
