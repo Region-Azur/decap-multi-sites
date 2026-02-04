@@ -70,8 +70,17 @@ async function ensureSchema(db) {
       table.string("branch").notNullable().defaultTo("main");
       table.string("content_path").notNullable().defaultTo("content");
       table.string("media_path").notNullable().defaultTo("static/uploads/");
+      table.string("domain").nullable(); // Custom domain support
       table.boolean("enabled").notNullable().defaultTo(true);
     });
+  } else {
+    // Migration: Add 'domain' column if it doesn't exist
+    const hasDomain = await db.schema.hasColumn("sites", "domain");
+    if (!hasDomain) {
+      await db.schema.table("sites", (table) => {
+        table.string("domain").nullable();
+      });
+    }
   }
 
   const hasPermissions = await db.schema.hasTable("site_permissions");

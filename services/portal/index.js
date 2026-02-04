@@ -106,7 +106,7 @@ async function getAuthInfo(req) {
     accessToken,
   };
 }
-// ...
+
 async function getOrCreateUser(auth) {
   const existing = await db("users")
     .where({ oidc_issuer: auth.issuer, oidc_sub: auth.sub })
@@ -257,137 +257,179 @@ function renderSitePicker(user, sites) {
 </html>`;
 }
 
-function renderAdminPanel(user, sites, users) {
-  const sitesRows = sites.map(site => `
-    <tr>
-        <td>${site.id}</td>
-        <td>${site.display_name}</td>
-        <td>${site.github_repo}</td>
-        <td>${site.enabled ? 'Yes' : 'No'}</td>
-    </tr>
-  `).join("");
+function renderAdminPanel(user, sites, permissions) {
+  const siteRows = sites.map(s => {
+    const owner = s.github_repo.split('/')[0] || 'username';
+    const dnsTarget = `${owner}.github.io`;
 
-  const usersRows = users.map(u => `
-    <option value="${u.email}">${u.name} (${u.email})</option>
-  `).join("");
+    let dnsButton = "";
+    if (s.domain) {
+      const host = s.domain.startsWith('www') ? 'www' : '@';
+      const msg = `DNS Setup for ${s.domain}:\\n\\nType: CNAME\\nHost: ${host}\\nValue: ${dnsTarget}`;
+      dnsButton = `<button onclick="alert('${msg}')">DNS Info</button>`;
+    }
 
-  const sitesOptions = sites.map(s => `
-    <option value="${s.id}">${s.display_name} (${s.id})</option>
-  `).join("");
+    return `<tr>
+      <td><a href="/admin/${s.id}" target="_blank">${s.display_name}</a></td>
+      <td>${s.github_repo}</td>
+      <td>${s.domain || '<em style="color:#888">None</em>'}</td>
+      <td>${dnsButton}</td>
+    </tr>`;
+  }).join("");
+
+  const permissionRows = permissions.map(p => {
+    return `<tr>
+      <td>${p.user_email}</td>
+      <td>${p.site_name} (${p.site_slug})</td>
+      <td><button onclick="revokePermission('${p.user_email}', '${p.site_id}')" style="background: #fee; color: red; border: 1px solid red; cursor:pointer;">Revoke</button></td>
+    </tr>`;
+  }).join("");
+
+  // Get unique users for the user select dropdown
+  // We can extract them from the permissions or assume we might want all users.
+  // The original code passed 'users' but we are passing 'permissions'.
+  // Let's rely on a separate users list if we want to grant permissions to anyone.
+  // But we changed the signature. To keep it simple, we'll just show active permissions for now.
+  // If "Grant Permission" needs a list of users, we'd need to pass that too.
+  // Let's just fix the Grant Permission form to use text input for now or fetch users if needed.
+  // Original code: const users = await db("users").orderBy("name");
+  // We should probably pass 'users' as well to populate the dropdown.
+  // Changing signature to: renderAdminPanel(user, sites, permissions, allUsers)
 
   return `<!doctype html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>Decap CMS Admin Panel</title>
+  <title>CMS Admin Panel</title>
   <style>
-    body { font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
-    h1, h2 { border-bottom: 1px solid #ccc; padding-bottom: 10px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background: #f4f4f4; }
-    .form-group { margin-bottom: 15px; }
-    label { display: block; margin-bottom: 5px; font-weight: bold; }
-    input, select { padding: 8px; width: 100%; box-sizing: border-box; }
-    button { padding: 10px 15px; background: #007bff; color: white; border: none; cursor: pointer; }
-    button:hover { background: #0056b3; }
-    .section { margin-bottom: 40px; background: #f9f9f9; padding: 20px; border-radius: 8px; }
+    body { font-family: sans-serif; padding: 2rem; max-width: 1000px; margin: 0 auto; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.5rem; }
+    input { padding: 0.5rem; width: 100%; max-width: 400px; }
+    button { padding: 0.5rem 1rem; cursor: pointer; }
+    h2 { border-bottom: 2px solid #eee; padding-bottom: 0.5rem; margin-top: 2rem; }
   </style>
-</head>
-<body>
-  <h1>Admin Panel</h1>
-  <p>Welcome, ${user.name} | <a href="/admin">Back to Site Picker</a></p>
-
-  <div class="section">
-    <h2>Sites</h2>
-    <table>
-      <thead>
-        <tr><th>ID</th><th>Name</th><th>Repo</th><th>Enabled</th></tr>
-      </thead>
-      <tbody>${sitesRows}</tbody>
-    </table>
-
-    <h3>Add New Site</h3>
-    <form id="addSiteForm">
-      <div class="form-group"><label>ID (e.g. my-site)</label><input type="text" name="id" required pattern="[a-z0-9-]+"></div>
-      <div class="form-group"><label>Display Name</label><input type="text" name="display_name" required></div>
-      <div class="form-group"><label>GitHub Repo (e.g. org/repo)</label><input type="text" name="github_repo" required></div>
-      <div class="form-group"><label>Branch</label><input type="text" name="branch" value="main"></div>
-      <button type="submit">Create Site</button>
-    </form>
-  </div>
-
-  <div class="section">
-    <h2>Permissions</h2>
-    <p>Grant access to a user for a specific site.</p>
-    <form id="addPermissionForm">
-      <div class="form-group">
-        <label>User</label>
-        <select name="email" required>
-            <option value="">Select User...</option>
-            ${usersRows}
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Site</label>
-        <select name="site_id" required>
-            <option value="">Select Site...</option>
-            ${sitesOptions}
-        </select>
-      </div>
-       <div class="form-group">
-        <label>Role</label>
-        <select name="role">
-            <option value="editor">Editor</option>
-            <option value="publisher">Publisher</option>
-        </select>
-      </div>
-      <button type="submit">Grant Permission</button>
-    </form>
-  </div>
-
   <script>
-    document.getElementById('addSiteForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      const data = Object.fromEntries(formData.entries());
-      
-      try {
-        const res = await fetch('/api/admin/sites', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        if (res.ok) {
-           alert('Site created!');
-           window.location.reload();
-        } else {
-           const err = await res.json();
-           alert('Error: ' + (err.error || 'Unknown error'));
+    async function revokePermission(email, siteId) {
+        if(!confirm('Revoke access for ' + email + ' to ' + siteId + '?')) return;
+        
+        try {
+            const res = await fetch('/api/admin/permissions', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email, site_id: siteId })
+            });
+            if (res.ok || res.status === 204) {
+                window.location.reload();
+            } else {
+                const err = await res.json();
+                alert('Error: ' + (err.error || 'Unknown error'));
+            }
+        } catch (e) {
+            alert('Network error');
         }
-      } catch (err) { alert('Network error'); }
-    });
+    }
 
-    document.getElementById('addPermissionForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      const data = Object.fromEntries(formData.entries());
-      
-      try {
-        const res = await fetch('/api/admin/permissions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById('addSiteForm').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          const data = Object.fromEntries(formData.entries());
+          
+          try {
+            const res = await fetch('/api/admin/sites', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+            });
+            if (res.ok) {
+               alert('Site created!');
+               window.location.reload();
+            } else {
+               const err = await res.json();
+               alert('Error: ' + (err.error || 'Unknown error'));
+            }
+          } catch (err) { alert('Network error'); }
         });
-        if (res.ok) {
-           alert('Permission granted!');
-        } else {
-           const err = await res.json();
-           alert('Error: ' + (err.error || 'Unknown error'));
-        }
-      } catch (err) { alert('Network error'); }
+
+        document.getElementById('addPermissionForm').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          const data = Object.fromEntries(formData.entries());
+          
+          try {
+            const res = await fetch('/api/admin/permissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+            });
+            if (res.ok) {
+               alert('Permission granted!');
+               window.location.reload();
+            } else {
+               const err = await res.json();
+               alert('Error: ' + (err.error || 'Unknown error'));
+            }
+          } catch (err) { alert('Network error'); }
+        });
     });
   </script>
+</head>
+<body>
+  <h1>CMS Admin Panel</h1>
+  <p>Logged in as: <strong>${user.name}</strong> (${user.email})</p>
+
+  <h2>Sites</h2>
+  <table>
+    <tr><th>Name</th><th>Repo</th><th>Domain</th><th>Actions</th></tr>
+    ${siteRows}
+  </table>
+
+  <h3>Add New Site</h3>
+  <form id="addSiteForm">
+    <div class="form-group">
+      <label>ID (Slug)</label>
+      <input name="id" required placeholder="my-site">
+    </div>
+    <div class="form-group">
+      <label>Display Name</label>
+      <input name="display_name" required placeholder="My Site">
+    </div>
+    <div class="form-group">
+      <label>GitHub Repo (owner/repo)</label>
+      <input name="github_repo" required placeholder="owner/repo">
+    </div>
+    <div class="form-group">
+      <label>Branch</label>
+      <input name="branch" value="main">
+    </div>
+    <div class="form-group">
+      <label>Custom Domain (Optional)</label>
+      <input name="domain" placeholder="www.example.com">
+      <small style="display:block;color:#666">Will auto-configure CNAME in repo</small>
+    </div>
+    <button type="submit">Create Site</button>
+  </form>
+
+  <h2>Active Permissions</h2>
+  <table>
+    <tr><th>User</th><th>Site</th><th>Action</th></tr>
+    ${permissionRows.length ? permissionRows : '<tr><td colspan="3">No active permissions</td></tr>'}
+  </table>
+
+  <h3>Grant Permission</h3>
+  <form id="addPermissionForm">
+    <div class="form-group">
+      <label>User Email</label>
+      <input name="email" type="email" required>
+    </div>
+    <div class="form-group">
+      <label>Site ID</label>
+      <input name="site_id" required>
+    </div>
+    <button type="submit">Grant Access</button>
+  </form>
 </body>
 </html>`;
 }
@@ -590,16 +632,18 @@ async function handleAdminPanel(req, res) {
     return;
   }
 
-  // Fetch data from internal DB directly since we are in the trusted network/same DB
-  // Alternatively, fetch from API if separation is strict, but direct DB is easier here 
-  // since Portal and API share the DB code/access in this setup.
   const sites = await db("sites").orderBy("display_name");
-  const users = await db("users").orderBy("name");
 
-  res.type("html").send(renderAdminPanel(user, sites, users));
+  // Fetch permissions with details for the UI
+  const permissions = await db("site_permissions")
+    .join("users", "site_permissions.user_id", "users.id")
+    .join("sites", "site_permissions.site_id", "sites.id")
+    .select("site_permissions.user_id", "site_permissions.site_id", "users.email as user_email", "sites.display_name as site_name", "sites.id as site_slug")
+    .orderBy("users.email");
+
+  res.type("html").send(renderAdminPanel(user, sites, permissions));
 }
 
-app.get("/", handleAdminHome);
 app.get("/admin", handleAdminHome);
 app.get("/admin-panel", handleAdminPanel);
 
@@ -633,7 +677,7 @@ app.get("/admin/:siteId", async (req, res) => {
     exp: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year expiry
   });
   const signature = "dummy_signature";
-  const token = `${header}.${payload}.${signature}`;
+  const token = `${header}.${payload}.${signature} `;
 
   await db("api_tokens").insert({
     token, // We store the full token string to match exactly
@@ -652,7 +696,6 @@ app.get("/admin/:siteId", async (req, res) => {
 });
 
 
-
 app.get("/configs/:siteId.yml", async (req, res) => {
   console.log(`DEBUG: Config request for ${req.params.siteId}`);
 
@@ -667,7 +710,7 @@ app.get("/configs/:siteId.yml", async (req, res) => {
   const siteId = req.params.siteId;
 
   const permitted = await hasPermission(user, siteId);
-  console.log(`DEBUG: Permission check for user ${user.email} on site ${siteId}: ${permitted}`);
+  console.log(`DEBUG: Permission check for user ${user.email} on site ${siteId}: ${permitted} `);
 
   if (!permitted) {
     res.status(403).send("Forbidden");
@@ -681,7 +724,7 @@ app.get("/configs/:siteId.yml", async (req, res) => {
     return;
   }
 
-  const config = `backend:\n  name: git-gateway\n  api_root: ${API_BASE_URL}/.netlify/git\n  repo: ${site.github_repo}\n  branch: ${site.branch}\nmedia_folder: ${site.media_path}\npublic_folder: ${site.media_path}\ncollections:\n  - name: "pages"\n    label: "Pages"\n    folder: "${site.content_path}"\n    create: true\n    fields:\n      - {label: "Title", name: "title", widget: "string"}\n      - {label: "Body", name: "body", widget: "markdown"}\n`;
+  const config = `backend: \n  name: git-gateway\n  api_root: ${API_BASE_URL}/.netlify/git\n  repo: ${site.github_repo}\n  branch: ${site.branch}\nmedia_folder: ${site.media_path}\npublic_folder: ${site.media_path}\ncollections: \n - name: "pages"\n    label: "Pages"\n    folder: "${site.content_path}"\n    create: true\n    fields: \n      - { label: "Title", name: "title", widget: "string" }\n      - { label: "Body", name: "body", widget: "markdown" }\n`;
   res.type("text/yaml").send(config);
 });
 
@@ -689,6 +732,6 @@ app.get("/configs/:siteId.yml", async (req, res) => {
   await ensureSchema(db);
   app.listen(PORT, () => {
     // eslint-disable-next-line no-console
-    console.log(`Portal listening on ${PORT}`);
+    console.log(`Portal listening on ${PORT} `);
   });
 })();

@@ -239,6 +239,7 @@ router.post("/admin/sites", async (req, res) => {
     branch = "main",
     content_path = "content",
     media_path = "static/uploads/",
+    domain = null,
     enabled = true,
   } = req.body;
 
@@ -254,8 +255,44 @@ router.post("/admin/sites", async (req, res) => {
     branch,
     content_path,
     media_path,
+    domain,
     enabled: Boolean(enabled),
   });
+
+  // Auto-configure CNAME if domain is provided
+  if (domain) {
+    try {
+      const octokit = await getOctokit();
+      const { owner, repo } = parseRepo(github_repo);
+
+      console.log(`DEBUG: Auto-configuring CNAME for ${github_repo} -> ${domain}`);
+
+      // Check if CNAME exists to get SHA for update (or create new)
+      let sha;
+      try {
+        const { data: existingFile } = await octokit.repos.getContent({
+          owner,
+          repo,
+          path: "CNAME",
+          ref: branch
+        });
+        sha = existingFile.sha;
+      } catch (e) {/* Ignore 404 */ }
+
+      await octokit.repos.createOrUpdateFileContents({
+        owner,
+        repo,
+        path: "CNAME",
+        message: `Configure custom domain: ${domain}`,
+        content: Buffer.from(domain).toString("base64"),
+        branch,
+        sha
+      });
+    } catch (err) {
+      console.error(`DEBUG: Failed to create CNAME: ${err.message}`);
+      // Non-blocking error, site still created in DB
+    }
+  }
 
   res.status(201).json({ id });
 });
