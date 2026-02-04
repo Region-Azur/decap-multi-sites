@@ -118,10 +118,15 @@ function normalizePrivateKey(rawKey) {
   const decoded = GITHUB_APP_PRIVATE_KEY_BASE64
     ? Buffer.from(rawKey, "base64").toString("utf8")
     : rawKey;
-  const normalized = decoded.replace(/\\n/g, "\n");
+  let normalized = decoded.replace(/\\n/g, "\n");
+
+  if (!normalized.includes("-----BEGIN")) {
+    console.log("DEBUG: Key missing headers, adding them...");
+    normalized = `-----BEGIN RSA PRIVATE KEY-----\n${normalized}\n-----END RSA PRIVATE KEY-----`;
+  }
+
   console.log(`DEBUG: Private Key loaded. Length: ${normalized.length}`);
   console.log(`DEBUG: Key Start: ${normalized.substring(0, 30)}...`);
-  console.log(`DEBUG: Key End: ...${normalized.substring(normalized.length - 30)}`);
   return normalized;
 }
 
