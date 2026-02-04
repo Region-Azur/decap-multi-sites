@@ -291,7 +291,7 @@ router.get("/settings", async (_req, res) => {
   // Return empty settings or relevant git-gateway config
   // This endpoint confirms to the client that the backend is available.
   // roles: [] is safer than null for clients expecting an array
-  res.json({ git_gateway: { roles: [] } });
+  res.json({ github_enabled: true, git_gateway: { roles: [] } });
 });
 
 router.get("/user", async (req, res) => {
