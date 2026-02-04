@@ -15,7 +15,7 @@ const GITHUB_APP_ID = process.env.GITHUB_APP_ID;
 const GITHUB_APP_INSTALLATION_ID = process.env.GITHUB_APP_INSTALLATION_ID;
 const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY;
 const GITHUB_APP_PRIVATE_KEY_BASE64 =
-  process.env.GITHUB_APP_PRIVATE_KEY_BASE64 === "true";
+  process.env.GITHUB_APP_PRIVATE_KEY_BASE64 === "true"; // NOTE: The private key is used only for authenticating the GitHub App. It must never be sent to the client in any API response.
 const API_BODY_LIMIT = process.env.API_BODY_LIMIT || "2mb";
 
 const app = express();
@@ -467,6 +467,48 @@ router.all("/github/*", async (req, res) => {
   }
 
   console.log(`DEBUG: Proxying GitHub request: ${method} /${path} -> /${finalPath}`);
+
+  // Ensure branch exists for GET branch requests before security check
+  if (method === "GET" && finalPath.match(/^repos\/[^/]+\/[^/]+\/branches\/([^/]+)$/)) {
+    try {
+      const octokit = await getOctokit();
+      const branchMatch = finalPath.match(/^repos\/([^/]+)\/([^/]+)\/branches\/([^/]+)$/);
+      const [, owner, repo, branch] = branchMatch;
+      const { data: repoData } = await octokit.repos.get({ owner, repo });
+      if (repoData.size === 0) {
+        // Empty repo – create initial README on target branch
+        await octokit.repos.createOrUpdateFileContents({
+          owner,
+          repo,
+          path: "README.md",
+          message: "Initial commit by Decap CMS Proxy",
+          content: Buffer.from("# " + repoData.name).toString("base64"),
+          branch,
+        });
+        console.log(`DEBUG: Initialized empty repo with ${branch} branch.`);
+      } else {
+        // Repo has content – ensure branch exists, create from default if missing
+        try {
+          await octokit.git.getRef({ owner, repo, ref: `heads/${branch}` });
+        } catch (_) {
+          const { data: refData } = await octokit.git.getRef({
+            owner,
+            repo,
+            ref: `heads/${repoData.default_branch}`,
+          });
+          await octokit.git.createRef({
+            owner,
+            repo,
+            ref: `refs/heads/${branch}`,
+            sha: refData.object.sha,
+          });
+          console.log(`DEBUG: Created missing branch ${branch} from ${repoData.default_branch}`);
+        }
+      }
+    } catch (branchErr) {
+      console.error(`DEBUG: Branch auto‑creation failed: ${branchErr.message}`);
+    }
+  }
 
   // Basic security check: ensure user has access to the repo they are trying to access
   if (!user.is_admin) {
