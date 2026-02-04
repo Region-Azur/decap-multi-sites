@@ -601,9 +601,69 @@ router.all("/github/*", async (req, res) => {
 
   try {
     const octokit = await getOctokit();
-    const response = await octokit.request(`${method} /${finalPath}`, {
-      data: body,
-    });
+    let response;
+
+    // Fix for GitHub API "branch:path" syntax sometimes returning root tree unexpectedly
+    // We manually walk the tree to find the correct SHA for the path
+    if (method === "GET" && finalPath.includes("/git/trees/") && finalPath.includes(":")) {
+      const match = finalPath.match(/git\/trees\/([^:]+):(.+)$/);
+      if (match) {
+        let [_, branch, path] = match;
+        const repoPathMatch = finalPath.match(/^repos\/([^/]+)\/([^/]+)\//);
+        const owner = repoPathMatch[1];
+        const repo = repoPathMatch[2];
+
+        console.log(`DEBUG: Manual Tree Walk for ${owner}/${repo} ref=${branch} path=${path}`);
+
+        try {
+          // 1. Get Root Tree of branch
+          const { data: rootData } = await octokit.git.getTree({ owner, repo, tree_sha: branch }); // Non-recursive first level
+
+          // 2. Find the SHA for the first path segment (assuming single level "content" for now, or standard recursion logic later if needed)
+          // For "content", we just find "content"
+          // If path is "content/sub", we would need to recurse. For now, let's handle single level which covers the use case.
+          // Decap usually requests "branch:content" not deep paths for collections unless configured so.
+
+          let targetSha = null;
+          const pathParts = path.split("/"); // Handle simple nesting if needed
+          let currentTree = rootData.tree;
+
+          for (const part of pathParts) {
+            if (!part) continue;
+            const item = currentTree.find(t => t.path === part && t.type === "tree");
+            if (!item) {
+              console.log(`DEBUG: Path segment '${part}' not found in tree.`);
+              targetSha = null;
+              break;
+            }
+            targetSha = item.sha;
+            // If more parts, fetch next tree? (Optimization: unlikely for this specific issue, but good for robustness)
+            if (pathParts.indexOf(part) < pathParts.length - 1) {
+              const { data: nextTree } = await octokit.git.getTree({ owner, repo, tree_sha: targetSha });
+              currentTree = nextTree.tree;
+            }
+          }
+
+          if (targetSha) {
+            console.log(`DEBUG: Resolved path '${path}' to SHA ${targetSha}. Fetching directly...`);
+            // 3. Request specific tree by SHA
+            response = await octokit.git.getTree({ owner, repo, tree_sha: targetSha });
+          } else {
+            console.log(`DEBUG: Could not resolve SHA for path '${path}'. Falling back to original request.`);
+            // Fallback to original if not found (404 likely)
+            response = await octokit.request(`${method} /${finalPath}`, { data: body });
+          }
+
+        } catch (walkErr) {
+          console.error(`DEBUG: Manual walk failed: ${walkErr.message}. Falling back.`);
+          response = await octokit.request(`${method} /${finalPath}`, { data: body });
+        }
+      } else {
+        response = await octokit.request(`${method} /${finalPath}`, { data: body });
+      }
+    } else {
+      response = await octokit.request(`${method} /${finalPath}`, { data: body });
+    }
 
     if (finalPath.includes("/contents/") || finalPath.includes("/git/trees/")) {
       console.log(`DEBUG: GitHub Proxy Response for ${finalPath}: Status ${response.status}`);
