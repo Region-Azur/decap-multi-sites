@@ -185,7 +185,12 @@ async function requireUser(req, res) {
     return null;
   }
 
-  return getOrCreateUser(auth);
+  const user = await getOrCreateUser(auth);
+  // Propagate siteId from auth context (e.g. from JWT lookup or API token)
+  if (auth.siteId) {
+    user.siteId = auth.siteId;
+  }
+  return user;
 }
 
 async function getSiteForUser(user, siteId) {
