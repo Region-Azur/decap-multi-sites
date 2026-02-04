@@ -295,6 +295,65 @@ router.post("/admin/sites", async (req, res) => {
   }
 
   res.status(201).json({ id });
+  res.status(201).json({ id });
+});
+
+router.put("/admin/sites/:siteId", async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+
+  const { siteId } = req.params;
+  const { domain, display_name, branch, enabled } = req.body;
+
+  const site = await db("sites").where({ id: siteId }).first();
+  if (!site) {
+    res.status(404).json({ error: "Site not found" });
+    return;
+  }
+
+  // Update DB
+  await db("sites").where({ id: siteId }).update({
+    domain: domain !== undefined ? domain : site.domain,
+    display_name: display_name || site.display_name,
+    branch: branch || site.branch,
+    enabled: enabled !== undefined ? Boolean(enabled) : site.enabled
+  });
+
+  // Handle CNAME update if domain changed
+  if (domain && domain !== site.domain) {
+    try {
+      const octokit = await getOctokit();
+      const { owner, repo } = parseRepo(site.github_repo);
+      const targetBranch = branch || site.branch;
+
+      console.log(`DEBUG: Updating CNAME for ${site.github_repo} -> ${domain}`);
+
+      let sha;
+      try {
+        const { data: existingFile } = await octokit.repos.getContent({
+          owner,
+          repo,
+          path: "CNAME",
+          ref: targetBranch
+        });
+        sha = existingFile.sha;
+      } catch (e) {/* Ignore 404 */ }
+
+      await octokit.repos.createOrUpdateFileContents({
+        owner,
+        repo,
+        path: "CNAME",
+        message: `Update custom domain: ${domain}`,
+        content: Buffer.from(domain).toString("base64"),
+        branch: targetBranch,
+        sha
+      });
+    } catch (err) {
+      console.error(`DEBUG: Failed to update CNAME: ${err.message}`);
+    }
+  }
+
+  res.json({ success: true });
 });
 
 router.post("/admin/permissions", async (req, res) => {
