@@ -551,7 +551,7 @@ function renderDecapShell(site, token) {
             } catch (e) {
                 console.error("Auto-login exception", e);
             }
-
+            });
          } else {
             console.error("CMS global not found!");
          }
