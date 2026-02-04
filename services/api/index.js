@@ -78,11 +78,19 @@ async function getAuthInfo(req) {
     return null;
   }
 
+  // JWT auth – look up user and site permissions to provide siteId
+  const dbUser = await db("users").where({ email }).first();
+  let siteId = null;
+  if (dbUser) {
+    const perm = await db("site_permissions").where({ user_id: dbUser.id }).first();
+    if (perm) siteId = perm.site_id;
+  }
   return {
     issuer,
     sub,
     email,
     name,
+    siteId,
   };
 }
 
