@@ -649,8 +649,14 @@ async function handleAdminPanel(req, res) {
 
 function renderAdminPanel(user, sites, permissions, allUsers) {
   const siteRows = sites.map(s => {
-    const owner = s.github_repo.split('/')[0] || 'username';
+    const [owner, repo] = s.github_repo.split('/');
     const dnsTarget = `${owner}.github.io`;
+
+    // Determine published URL
+    let publishedUrl = `https://${owner}.github.io/${repo}`;
+    if (s.domain) {
+      publishedUrl = `https://${s.domain}`;
+    }
 
     let dnsButton = "";
     if (s.domain) {
@@ -666,7 +672,10 @@ function renderAdminPanel(user, sites, permissions, allUsers) {
         ${s.domain || '<em style="color:#888">None</em>'} 
         <button onclick="editDomain('${s.id}', '${s.domain || ''}')" style="font-size:0.8em; margin-left:5px;">Edit</button>
       </td>
-      <td>${dnsButton}</td>
+      <td>
+        <a href="${publishedUrl}" target="_blank" style="margin-right:10px;">View Site</a>
+        ${dnsButton}
+      </td>
     </tr>`;
   }).join("");
 
