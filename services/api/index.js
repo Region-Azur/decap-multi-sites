@@ -451,6 +451,7 @@ router.all("/github/*", async (req, res) => {
 
   const path = req.params[0]; // Capture the * part
   let method = req.method;
+  const body = req.body;
   let finalPath = path;
 
   // Context-aware proxying for generic requests (e.g., /branches/main)
