@@ -610,7 +610,7 @@ router.all("/github/*", async (req, res) => {
       if (response.data && response.data.tree) {
         // Filter out README.md from tree listing to prevent CMS parsing errors
         response.data.tree = response.data.tree.filter(f => f.path !== "README.md" && !f.path.endsWith("/README.md"));
-        console.log(`DEBUG: Tree listing (filtered): ${response.data.tree.map(f => f.path).join(", ")}`);
+        console.log(`DEBUG: Tree listing (filtered): ${response.data.tree.map(f => `${f.path} [${f.type}]`).join(", ")}`);
       } else if (Array.isArray(response.data)) {
         console.log(`DEBUG: Directory listing: ${response.data.map(f => f.name).join(", ")}`);
       }
