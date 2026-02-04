@@ -399,7 +399,7 @@ function renderDecapShell(site, token) {
   <head>
     <meta charset="utf-8" />
     <title>Decap CMS - ${siteId}</title>
-    <title>Decap CMS - ${siteId}</title>
+
     <script>window.CMS_MANUAL_INIT = true;</script>
     <style>
       /* Optional: Hide Netlify Identity Widget default button if it appears */
@@ -545,7 +545,8 @@ function renderDecapShell(site, token) {
                     
                     fireLogin();
                 } else {
-                    console.error("Fetch /api/user failed: " + await res.text());
+                    const errText = await res.text();
+                    console.error("Fetch /api/user failed: " + errText);
                 }
             } catch (e) {
                 console.error("Auto-login exception", e);
