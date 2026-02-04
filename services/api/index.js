@@ -447,6 +447,7 @@ router.delete("/sites/:siteId/contents", async (req, res) => {
 // Proxies requests from /.netlify/git/github/* to https://api.github.com/*
 router.all("/github/*", async (req, res) => {
   const user = await requireUser(req, res);
+  console.log(`DEBUG: Authenticated user object: ${JSON.stringify(user)}`);
   if (!user) return; // requireUser handles 401
 
   const path = req.params[0]; // Capture the * part
@@ -457,6 +458,7 @@ router.all("/github/*", async (req, res) => {
   // Context-aware proxying for generic requests (e.g., /branches/main)
   if (!path.startsWith("repos/") && !path.startsWith("user")) {
     if (user.siteId) {
+      console.log(`DEBUG: Attempting site lookup for siteId=${user.siteId}`);
       const site = await db("sites").where({ id: user.siteId }).first();
       if (site) {
         console.log(`DEBUG: Rewriting generic proxy request request for site ${site.id} (${site.github_repo})`);
