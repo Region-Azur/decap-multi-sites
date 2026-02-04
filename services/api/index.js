@@ -456,6 +456,55 @@ router.delete("/sites/:siteId/contents", async (req, res) => {
   res.json(response.data);
 });
 
+// List files in a folder (recursive flattening)
+async function listFiles(req, res) {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const site = await getSiteForUser(user, req.params.siteId);
+  if (!site) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const { path } = req.query;
+  const octokit = await getOctokit();
+  const { owner, repo } = parseRepo(site.github_repo);
+
+  try {
+    // Get the recursive tree for the branch
+    const { data: treeData } = await octokit.git.getTree({
+      owner,
+      repo,
+      tree_sha: site.branch,
+      recursive: 1,
+    });
+
+    // Filter items that start with the requested folder path
+    const files = treeData.tree
+      .filter((item) => item.path.startsWith(path) && item.type === "blob")
+      .map((item) => ({
+        path: item.path,
+        sha: item.sha,
+        size: item.size,
+        name: item.path.replace(path, "").replace(/^\//, ""), // relative name
+        type: "file",
+      }));
+
+    res.json(files);
+  } catch (err) {
+    if (err.status === 404) {
+      console.log(`DEBUG: Tree/path not found for ${path}, returning empty list.`);
+      res.json([]);
+    } else {
+      console.error("List files error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+}
+
+router.get("/sites/:siteId/files", listFiles);
+
 // Generic GitHub Proxy for Git Gateway
 // Proxies requests from /.netlify/git/github/* to https://api.github.com/*
 router.all("/github/*", async (req, res) => {
@@ -556,10 +605,12 @@ router.all("/github/*", async (req, res) => {
       data: body,
     });
 
-    if (finalPath.includes("/contents/")) {
+    if (finalPath.includes("/contents/") || finalPath.includes("/git/trees/")) {
       console.log(`DEBUG: GitHub Proxy Response for ${finalPath}: Status ${response.status}`);
-      if (Array.isArray(response.data)) {
-        console.log(`DEBUG: Directory listing contains: ${response.data.map(f => f.name).join(", ")}`);
+      if (response.data && response.data.tree) {
+        console.log(`DEBUG: Tree listing: ${response.data.tree.map(f => f.path).join(", ")}`);
+      } else if (Array.isArray(response.data)) {
+        console.log(`DEBUG: Directory listing: ${response.data.map(f => f.name).join(", ")}`);
       }
     }
 
