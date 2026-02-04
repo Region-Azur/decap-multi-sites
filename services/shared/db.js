@@ -68,7 +68,7 @@ async function ensureSchema(db) {
       table.string("display_name").notNullable();
       table.string("github_repo").notNullable();
       table.string("branch").notNullable().defaultTo("main");
-      table.string("content_path").notNullable().defaultTo("content/");
+      table.string("content_path").notNullable().defaultTo("content");
       table.string("media_path").notNullable().defaultTo("static/uploads/");
       table.boolean("enabled").notNullable().defaultTo(true);
     });

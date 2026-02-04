@@ -55,6 +55,18 @@ async function debugRepo() {
             console.log(` - ${item.path} [${item.type}]`);
         });
 
+        // 3. Test main:content specific request (Hypothesis: This returns ROOT tree)
+        console.log("\n--- Testing 'main:content' Request ---");
+        try {
+            const response = await octokit.request(`GET /repos/${owner}/${repo}/git/trees/${branch}:content`);
+            console.log(`Response for ${branch}:content:`);
+            response.data.tree.forEach(item => {
+                console.log(` - ${item.path} [${item.type}]`);
+            });
+        } catch (e) {
+            console.log(`Error requesting ${branch}:content: ${e.message}`);
+        }
+
         // 2. Check for 'content' specifically
         console.log("\n--- Analysis ---");
         const contentItems = rootTree.tree.filter(i => i.path.startsWith("content"));

@@ -237,7 +237,7 @@ router.post("/admin/sites", async (req, res) => {
     display_name,
     github_repo,
     branch = "main",
-    content_path = "content/",
+    content_path = "content",
     media_path = "static/uploads/",
     enabled = true,
   } = req.body;
