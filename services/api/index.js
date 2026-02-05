@@ -226,6 +226,8 @@ router.get("/admin/sites", async (req, res) => {
   res.json({ sites });
 });
 
+const { getTemplateFiles } = require("./templates");
+
 router.post("/admin/sites", async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
@@ -241,6 +243,7 @@ router.post("/admin/sites", async (req, res) => {
     media_path = "static/uploads/",
     domain = null,
     enabled = true,
+    theme = "minima" // Default theme
   } = req.body;
 
   if (!id || !display_name || !github_repo) {
@@ -259,43 +262,158 @@ router.post("/admin/sites", async (req, res) => {
     enabled: Boolean(enabled),
   });
 
-  // Auto-configure CNAME if domain is provided
-  if (domain) {
+  // --- Auto-Configuration (Templates & Pages) ---
+  try {
+    const octokit = await getOctokit();
+    const { owner, repo } = parseRepo(github_repo);
+    const templateUrls = getTemplateFiles(theme, display_name);
+
+    // 1. Commit Template Files
+    // We need to fetch current tree or just update files individually?
+    // createOrUpdateFileContents is easiest for individual files
+    // For multiple, traversing is better, but let's do sequential for simplicity (it's only ~3-4 files)
+
+    console.log(`DEBUG: Applying theme '${theme}' to ${github_repo}...`);
+
+    for (const [filePath, content] of Object.entries(templateUrls)) {
+      try {
+        // Check if exists to get SHA
+        let sha;
+        try {
+          const { data: existing } = await octokit.repos.getContent({
+            owner, repo, path: filePath, ref: branch
+          });
+          sha = existing.sha;
+        } catch (e) { } // 404
+
+        await octokit.repos.createOrUpdateFileContents({
+          owner,
+          repo,
+          path: filePath,
+          message: `Initialize theme: ${theme}`,
+          content: Buffer.from(content).toString("base64"),
+          branch,
+          sha
+        });
+      } catch (fileErr) {
+        console.error(`DEBUG: Failed to write ${filePath}: ${fileErr.message}`);
+      }
+    }
+
+    // 2. Enable GitHub Pages
     try {
-      const octokit = await getOctokit();
-      const { owner, repo } = parseRepo(github_repo);
+      console.log(`DEBUG: Enabling GitHub Pages for ${github_repo}...`);
+      const buildType = theme === 'chirpy' ? 'workflow' : 'legacy';
+      const source = buildType === 'legacy' ? { branch, path: '/' } : undefined;
 
-      console.log(`DEBUG: Auto-configuring CNAME for ${github_repo} -> ${domain}`);
+      await octokit.repos.createPagesSite({
+        owner,
+        repo,
+        source,
+        build_type: buildType
+      });
+      console.log(`DEBUG: GitHub Pages enabled (${buildType})`);
+    } catch (pagesErr) {
+      console.error(`DEBUG: Failed to enable Pages (might already be enabled or permission issue): ${pagesErr.message}`);
+    }
 
-      // Check if CNAME exists to get SHA for update (or create new)
+    // 3. Auto-configure CNAME if domain is provided (Existing logic moved here)
+    if (domain) {
+      // ... (existing CNAME logic, simplified call)
       let sha;
       try {
         const { data: existingFile } = await octokit.repos.getContent({
-          owner,
-          repo,
-          path: "CNAME",
-          ref: branch
+          owner, repo, path: "CNAME", ref: branch
         });
         sha = existingFile.sha;
-      } catch (e) {/* Ignore 404 */ }
+      } catch (e) { }
 
       await octokit.repos.createOrUpdateFileContents({
-        owner,
-        repo,
-        path: "CNAME",
+        owner, repo, path: "CNAME",
         message: `Configure custom domain: ${domain}`,
         content: Buffer.from(domain).toString("base64"),
         branch,
         sha
       });
-    } catch (err) {
-      console.error(`DEBUG: Failed to create CNAME: ${err.message}`);
-      // Non-blocking error, site still created in DB
     }
+
+  } catch (err) {
+    console.error(`DEBUG: Post-creation setup failed: ${err.message}`);
+    // Site is in DB, so we return success but maybe warn?
   }
 
   res.status(201).json({ id });
-  res.status(201).json({ id });
+});
+
+router.post("/admin/sites/:siteId/template", async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+
+  const { siteId } = req.params;
+  const { theme } = req.body;
+
+  const site = await db("sites").where({ id: siteId }).first();
+  if (!site) {
+    res.status(404).json({ error: "Site not found" });
+    return;
+  }
+
+  try {
+    const octokit = await getOctokit();
+    const { owner, repo } = parseRepo(site.github_repo);
+    const templateFiles = getTemplateFiles(theme, site.display_name);
+
+    console.log(`DEBUG: Re-applying theme '${theme}' to ${site.github_repo}...`);
+
+    for (const [filePath, content] of Object.entries(templateFiles)) {
+      let sha;
+      try {
+        const { data: existing } = await octokit.repos.getContent({
+          owner, repo, path: filePath, ref: site.branch
+        });
+        sha = existing.sha;
+      } catch (e) { }
+
+      await octokit.repos.createOrUpdateFileContents({
+        owner, repo, path: filePath,
+        message: `Update theme: ${theme}`,
+        content: Buffer.from(content).toString("base64"),
+        branch: site.branch,
+        sha
+      });
+    }
+
+    // Update Pages settings
+    const buildType = theme === 'chirpy' ? 'workflow' : 'legacy';
+    // Note: Updating existing pages sites via API can be tricky if they exist. 
+    // We catch errors.
+    try {
+      // First check if pages exists
+      try {
+        await octokit.repos.getPages({ owner, repo });
+        // Update
+        await octokit.repos.updateInformationAboutPagesSite({
+          owner, repo,
+          build_type: buildType,
+          source: buildType === 'legacy' ? { branch: site.branch, path: '/' } : undefined
+        });
+      } catch (e) {
+        // Create
+        await octokit.repos.createPagesSite({
+          owner, repo,
+          build_type: buildType,
+          source: buildType === 'legacy' ? { branch: site.branch, path: '/' } : undefined
+        });
+      }
+    } catch (e) {
+      console.error(`DEBUG: Failed to update Pages Settings: ${e.message}`);
+    }
+
+    res.json({ success: true, message: "Template deployed and Pages configured." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to deploy template: " + err.message });
+  }
 });
 
 router.put("/admin/sites/:siteId", async (req, res) => {

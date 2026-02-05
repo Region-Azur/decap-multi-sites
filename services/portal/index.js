@@ -674,6 +674,7 @@ function renderAdminPanel(user, sites, permissions, allUsers) {
       </td>
       <td>
         <a href="${publishedUrl}" target="_blank" style="margin-right:10px;">View Site</a>
+        <button onclick="changeTheme('${s.id}')" style="font-size:0.8em;">Theme</button>
         ${dnsButton}
       </td>
     </tr>`;
@@ -736,6 +737,27 @@ function renderAdminPanel(user, sites, permissions, allUsers) {
             if (res.ok) {
                 alert('Domain updated!');
                 window.location.reload();
+            } else {
+                const err = await res.json();
+                alert('Error: ' + (err.error || 'Unknown error'));
+            }
+        } catch (e) { alert('Network error'); }
+    }
+
+    async function changeTheme(siteId) {
+        const theme = prompt("Enter theme name (e.g. 'cotes2020/jekyll-theme-chirpy', 'minima', 'slate'):", "minima");
+        if (!theme) return;
+
+        if(!confirm('This will overwrite _config.yml and commit new template files. Continue?')) return;
+
+        try {
+            const res = await fetch('/api/admin/sites/' + siteId + '/template', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ theme: theme })
+            });
+            if (res.ok) {
+                alert('Theme deployed and Pages configured! It may take a minute for GitHub actions to build.');
             } else {
                 const err = await res.json();
                 alert('Error: ' + (err.error || 'Unknown error'));
@@ -817,6 +839,18 @@ function renderAdminPanel(user, sites, permissions, allUsers) {
       <input name="branch" value="main">
     </div>
     <div class="form-group">
+      <label>Theme</label>
+      <select name="theme">
+        <option value="minima">Minima (Default)</option>
+        <option value="chirpy">Chirpy (Advanced)</option>
+        <option value="slate">Slate (Dark)</option>
+        <option value="cayman">Cayman (Blue)</option>
+        <option value="merlot">Merlot (Red)</option>
+        <option value="midnight">Midnight (Dark)</option>
+        <option value="time-machine">Time Machine (Retro)</option>
+      </select>
+    </div>
+    <div class="form-group">
       <label>Custom Domain (Optional)</label>
       <input name="domain" placeholder="www.example.com">
       <small style="display:block;color:#666">Will auto-configure CNAME in repo</small>
@@ -840,7 +874,7 @@ function renderAdminPanel(user, sites, permissions, allUsers) {
       </select>
     </div>
     <div class="form-group">
-      <label>Site</label>
+      <label>Site ID</label>
       <select name="site_id" required>
         <option value="">Select Site...</option>
         ${siteOptions}
