@@ -1,60 +1,66 @@
 const yaml = require('js-yaml');
 
 const STANDARD_THEMES = [
-    'minima',
-    'jekyll-theme-slate',
-    'jekyll-theme-cayman',
-    'jekyll-theme-merlot',
-    'jekyll-theme-midnight',
-    'jekyll-theme-time-machine',
-    'jekyll-theme-hacker',
-    'jekyll-theme-tactile'
+  'minima',
+  'jekyll-theme-slate',
+  'jekyll-theme-cayman',
+  'jekyll-theme-merlot',
+  'jekyll-theme-midnight',
+  'jekyll-theme-time-machine',
+  'jekyll-theme-hacker',
+  'jekyll-theme-tactile'
 ];
 
 function getStandardConfig(title, theme) {
-    // Map friendly names to actual gem names if needed, 
-    // but for simplicity we'll assume the UI sends the full gem name 
-    // or we map it here.
-    let themeGem = theme;
-    if (!themeGem.startsWith('jekyll-theme-') && themeGem !== 'minima') {
-        themeGem = `jekyll-theme-${theme}`;
-    }
+  // Map friendly names to actual gem names if needed, 
+  // but for simplicity we'll assume the UI sends the full gem name 
+  // or we map it here.
+  let themeGem = theme;
+  if (!themeGem.startsWith('jekyll-theme-') && themeGem !== 'minima') {
+    themeGem = `jekyll-theme-${theme}`;
+  }
 
-    return yaml.dump({
-        title: title,
-        theme: themeGem,
-        plugins: ['jekyll-seo-tag'],
-        collections: {
-            pages: {
-                output: true,
-                permalink: '/:path/'
-            }
-        }
-    });
+  return yaml.dump({
+    title: title,
+    theme: themeGem,
+    plugins: ['jekyll-seo-tag'],
+    collections: {
+      content: {
+        output: true
+      },
+      pages: {
+        output: true,
+        permalink: '/:path/'
+      }
+    }
+  });
 }
 
 function getChirpyConfig(title) {
-    return yaml.dump({
-        title: title,
-        tagline: 'Built with Decap CMS',
-        description: 'A minimal, responsive and feature-rich Jekyll theme for technical writing.',
-        url: '', // Will be overridden by GH Pages
-        author: 'Admin',
-        remote_theme: 'cotes2020/jekyll-theme-chirpy',
-        theme_mode: 'light', // light, dark, manual
-        lang: 'en',
-        timezone: 'UTC',
-        collections: {
-            pages: {
-                output: true,
-                permalink: '/:path/'
-            }
-        }
-    });
+  return yaml.dump({
+    title: title,
+    tagline: 'Built with Decap CMS',
+    description: 'A minimal, responsive and feature-rich Jekyll theme for technical writing.',
+    url: '', // Will be overridden by GH Pages
+    author: 'Admin',
+    remote_theme: 'cotes2020/jekyll-theme-chirpy',
+    theme_mode: 'light', // light, dark, manual
+    lang: 'en',
+    timezone: 'UTC',
+    collections: {
+      content: {
+        output: true
+      },
+      pages: {
+        output: true,
+        permalink: '/:path/'
+      }
+    }
+  });
 }
 
 function getChirpyWorkflow() {
-    return `name: "Build and Deploy"
+  return `name: "Build and Deploy"
 on:
   push:
     branches:
@@ -112,10 +118,10 @@ jobs:
 }
 
 function getTemplateFiles(theme, title) {
-    const files = {};
+  const files = {};
 
-    // Common Index Content
-    files['index.md'] = `---
+  // Common Index Content
+  files['index.md'] = `---
 layout: home
 title: Home
 ---
@@ -125,35 +131,34 @@ title: Home
 This site is managed by Decap CMS.
 `;
 
-    if (theme === 'chirpy') {
-        // Advanced setup for Chirpy
-        files['_config.yml'] = getChirpyConfig(title);
-        files['Gemfile'] = `source "https://rubygems.org"
+  // Detect Chirpy variants
+  const isChirpy = theme === 'chirpy' || theme.includes('chirpy');
+
+  if (isChirpy) {
+    // Advanced setup for Chirpy
+    files['_config.yml'] = getChirpyConfig(title);
+    files['Gemfile'] = `source "https://rubygems.org"
 gem "jekyll"
 gem "jekyll-theme-chirpy"
 `;
-        // Chirpy often needs a contact data file or it complains
-        files['_data/contact.yml'] = `# Contact info
+    // Chirpy often needs a contact data file or it complains
+    files['_data/contact.yml'] = `# Contact info
 -
   type: github
   icon: "fab fa-github"
   url: "https://github.com/cotes2020/jekyll-theme-chirpy"
 `;
-        // Workflow for Actions
-        files['.github/workflows/pages.yml'] = getChirpyWorkflow();
-    } else {
-        // Standard setup
-        files['_config.yml'] = getStandardConfig(title, theme || 'minima');
-        // Standard themes usually work with just the config, 
-        // but sometimes a Gemfile helps if running locally. 
-        // For GH Pages native build, Gemfile isn't strictly required if using supported themes,
-        // but good practice.
-    }
+    // Workflow for Actions
+    files['.github/workflows/pages.yml'] = getChirpyWorkflow();
+  } else {
+    // Standard setup
+    files['_config.yml'] = getStandardConfig(title, theme || 'minima');
+  }
 
-    return files;
+  return files;
 }
 
 module.exports = {
-    getTemplateFiles,
-    STANDARD_THEMES
+  getTemplateFiles,
+  STANDARD_THEMES
 };
