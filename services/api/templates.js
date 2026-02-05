@@ -50,7 +50,7 @@ function getChirpyConfig(title) {
     description: 'A minimal, responsive and feature-rich Jekyll theme for technical writing.',
     url: '', // Will be overridden by GH Pages
     author: 'Admin',
-    remote_theme: 'cotes2020/jekyll-theme-chirpy',
+    theme: 'jekyll-theme-chirpy',
     theme_mode: 'light', // light, dark, manual
     lang: 'en',
     timezone: 'UTC',

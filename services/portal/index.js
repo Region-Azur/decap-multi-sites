@@ -528,6 +528,7 @@ function renderDecapShell(site, token) {
                         create: true,
                         fields: [
                             {label: "Title", name: "title", widget: "string"},
+                            {label: "Layout", name: "layout", widget: "hidden", default: "page"},
                             {label: "Body", name: "body", widget: "markdown"}
                         ]
                     }
