@@ -154,6 +154,60 @@ async function getOctokit() {
   return new Octokit({ auth: token });
 }
 
+async function commitMultipleFiles(octokit, owner, repo, branch, filesMap, message) {
+  try {
+    // 1. Get current commit (HEAD)
+    const { data: refData } = await octokit.git.getRef({
+      owner, repo, ref: `heads/${branch}`
+    });
+    const commitSha = refData.object.sha;
+
+    // 2. Get current tree
+    const { data: commitData } = await octokit.git.getCommit({
+      owner, repo, commit_sha: commitSha
+    });
+    const treeSha = commitData.tree.sha;
+
+    // 3. Create blobs for each file (optional, but cleaner for large content) or just use content inline
+    // We'll construct the tree array directly.
+    const tree = [];
+    for (const [path, content] of Object.entries(filesMap)) {
+      tree.push({
+        path,
+        mode: '100644', // file (blob)
+        type: 'blob',
+        content
+      });
+    }
+
+    // 4. Create new tree
+    const { data: newTree } = await octokit.git.createTree({
+      owner, repo, base_tree: treeSha, tree
+    });
+
+    // 5. Create new commit
+    const { data: newCommit } = await octokit.git.createCommit({
+      owner, repo,
+      message,
+      tree: newTree.sha,
+      parents: [commitSha]
+    });
+
+    // 6. Update reference
+    await octokit.git.updateRef({
+      owner, repo,
+      ref: `heads/${branch}`,
+      sha: newCommit.sha
+    });
+
+    console.log(`DEBUG: Atomic commit successful: ${newCommit.sha}`);
+    return newCommit.sha;
+  } catch (err) {
+    console.error(`DEBUG: Atomic commit failed: ${err.message}`);
+    throw err;
+  }
+}
+
 function parseRepo(fullName) {
   const [owner, repo] = fullName.split("/");
   if (!owner || !repo) {
@@ -275,30 +329,10 @@ router.post("/admin/sites", async (req, res) => {
 
     console.log(`DEBUG: Applying theme '${theme}' to ${github_repo}...`);
 
-    for (const [filePath, content] of Object.entries(templateUrls)) {
-      try {
-        // Check if exists to get SHA
-        let sha;
-        try {
-          const { data: existing } = await octokit.repos.getContent({
-            owner, repo, path: filePath, ref: branch
-          });
-          sha = existing.sha;
-        } catch (e) { } // 404
+    // 1. Commit Template Files (Atomic Commit)
+    console.log(`DEBUG: Applying theme '${theme}' to ${github_repo}...`);
+    await commitMultipleFiles(octokit, owner, repo, branch, templateUrls, `Initialize theme: ${theme}`);
 
-        await octokit.repos.createOrUpdateFileContents({
-          owner,
-          repo,
-          path: filePath,
-          message: `Initialize theme: ${theme}`,
-          content: Buffer.from(content).toString("base64"),
-          branch,
-          sha
-        });
-      } catch (fileErr) {
-        console.error(`DEBUG: Failed to write ${filePath}: ${fileErr.message}`);
-      }
-    }
 
     // 2. Enable GitHub Pages
     try {
@@ -364,24 +398,8 @@ router.post("/admin/sites/:siteId/template", async (req, res) => {
     const templateFiles = getTemplateFiles(theme, site.display_name);
 
     console.log(`DEBUG: Re-applying theme '${theme}' to ${site.github_repo}...`);
+    await commitMultipleFiles(octokit, owner, repo, site.branch, templateFiles, `Update theme: ${theme}`);
 
-    for (const [filePath, content] of Object.entries(templateFiles)) {
-      let sha;
-      try {
-        const { data: existing } = await octokit.repos.getContent({
-          owner, repo, path: filePath, ref: site.branch
-        });
-        sha = existing.sha;
-      } catch (e) { }
-
-      await octokit.repos.createOrUpdateFileContents({
-        owner, repo, path: filePath,
-        message: `Update theme: ${theme}`,
-        content: Buffer.from(content).toString("base64"),
-        branch: site.branch,
-        sha
-      });
-    }
 
     // Update Pages settings
     const buildType = theme === 'chirpy' ? 'workflow' : 'legacy';
