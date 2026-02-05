@@ -25,14 +25,21 @@ function getStandardConfig(title, theme) {
     theme: themeGem,
     plugins: ['jekyll-seo-tag'],
     collections: {
-      content: {
-        output: true
-      },
       pages: {
         output: true,
         permalink: '/:path/'
       }
-    }
+    },
+    defaults: [
+      {
+        scope: {
+          path: "content"
+        },
+        values: {
+          permalink: "/:slug/"
+        }
+      }
+    ]
   });
 }
 
@@ -48,15 +55,21 @@ function getChirpyConfig(title) {
     lang: 'en',
     timezone: 'UTC',
     collections: {
-      content: {
-        output: true,
-        permalink: '/content/:path/'
-      },
       pages: {
         output: true,
         permalink: '/:path/'
       }
-    }
+    },
+    defaults: [
+      {
+        scope: {
+          path: "content"
+        },
+        values: {
+          permalink: "/:slug/"
+        }
+      }
+    ]
   });
 }
 
