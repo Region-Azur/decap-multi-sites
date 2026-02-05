@@ -49,7 +49,8 @@ function getChirpyConfig(title) {
     timezone: 'UTC',
     collections: {
       content: {
-        output: true
+        output: true,
+        permalink: '/content/:path/'
       },
       pages: {
         output: true,
@@ -97,7 +98,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Build with Jekyll
-        run: count=$(find . -maxdepth 1 -name '_config.yml' | wc -l); if [[ $count == 0 ]]; then echo "No _config.yml found"; exit 1; fi; bundle exec jekyll b -d "_site" \${{ steps.pages.outputs.base_path }}
+        run: count=$(find . -maxdepth 1 -name '_config.yml' | wc -l); if [[ $count == 0 ]]; then echo "No _config.yml found"; exit 1; fi; bundle exec jekyll b -d "_site" --baseurl "\${{ steps.pages.outputs.base_path }}"
         env:
           JEKYLL_ENV: production
 
