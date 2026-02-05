@@ -6,6 +6,7 @@ COPY api/package.json api/package-lock.json* ./
 RUN npm install --omit=dev
 
 COPY api/index.js ./index.js
+COPY api/templates.js ./templates.js
 COPY shared ./shared
 
 ENV NODE_ENV=production
