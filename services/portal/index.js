@@ -532,11 +532,12 @@ function renderDecapShell(site, token) {
                 };
               },
               toBlock: function(obj) {
-                return `[${ obj.title }](${ obj.path })`;
+                return "[" + obj.title + "](" + obj.path + ")";
               },
               toPreview: function(obj) {
-                return `< a href = "${obj.path}" > ${ obj.title }</a > `;
+                return '<a href="' + obj.path + '">' + obj.title + '</a>';
               }
+            });
             });
 
             // Manually Initialize CMS with Config Object
