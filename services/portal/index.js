@@ -567,7 +567,6 @@ function renderDecapShell(site, token) {
                             {label: "Body", name: "body", widget: "markdown"}
                         ]
                     },
-                    }
                 ]
             };
 
