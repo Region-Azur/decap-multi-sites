@@ -538,7 +538,6 @@ function renderDecapShell(site, token) {
                 return '<a href="' + obj.path + '">' + obj.title + '</a>';
               }
             });
-            });
 
             // Manually Initialize CMS with Config Object
             const config = {
