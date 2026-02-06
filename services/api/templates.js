@@ -135,9 +135,10 @@ function getTemplateFiles(theme, title) {
   const files = {};
 
   // Common Index Content
-  files['index.md'] = `---
+  files['content/index.md'] = `---
 layout: home
 title: Home
+permalink: /
 ---
 
 # Welcome to ${title}

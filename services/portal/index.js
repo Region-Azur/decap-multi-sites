@@ -567,20 +567,6 @@ function renderDecapShell(site, token) {
                             {label: "Body", name: "body", widget: "markdown"}
                         ]
                     },
-                    {
-                        name: "settings",
-                        label: "Settings",
-                        files: [
-                            {
-                                name: "home",
-                                label: "Home Page",
-                                file: "index.md",
-                                fields: [
-                                    {label: "Title", name: "title", widget: "string"},
-                                    {label: "Content", name: "body", widget: "markdown"}
-                                ]
-                            }
-                        ]
                     }
                 ]
             };
