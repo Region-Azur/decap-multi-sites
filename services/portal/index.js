@@ -504,6 +504,41 @@ function renderDecapShell(site, token) {
          if (window.CMS) {
             console.log("Initializing CMS...");
 
+            // Register Internal Link Component
+            window.CMS.registerEditorComponent({
+              id: "internal-link",
+              label: "Internal Link",
+              fields: [
+                {
+                  name: "title",
+                  label: "Link Text",
+                  widget: "string"
+                },
+                {
+                  name: "path",
+                  label: "Page",
+                  widget: "relation",
+                  collection: "pages",
+                  search_fields: ["title"],
+                  value_field: "path",
+                  display_fields: ["title"]
+                }
+              ],
+              pattern: /^\[(.+)\]\((\S+)\)$/,
+              fromBlock: function(match) {
+                return {
+                  title: match[1],
+                  path: match[2]
+                };
+              },
+              toBlock: function(obj) {
+                return `[${ obj.title }](${ obj.path })`;
+              },
+              toPreview: function(obj) {
+                return `< a href = "${obj.path}" > ${ obj.title }</a > `;
+              }
+            });
+
             // Manually Initialize CMS with Config Object
             const config = {
                 backend: {
@@ -530,6 +565,21 @@ function renderDecapShell(site, token) {
                             {label: "Title", name: "title", widget: "string"},
                             {label: "Layout", name: "layout", widget: "hidden", default: "page"},
                             {label: "Body", name: "body", widget: "markdown"}
+                        ]
+                    },
+                    {
+                        name: "settings",
+                        label: "Settings",
+                        files: [
+                            {
+                                name: "home",
+                                label: "Home Page",
+                                file: "index.md",
+                                fields: [
+                                    {label: "Title", name: "title", widget: "string"},
+                                    {label: "Content", name: "body", widget: "markdown"}
+                                ]
+                            }
                         ]
                     }
                 ]
