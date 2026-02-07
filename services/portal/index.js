@@ -712,6 +712,7 @@ function renderAdminPanel(user, sites, permissions, allUsers) {
         <a href="${publishedUrl}" target="_blank" style="margin-right:10px;">View Site</a>
         <button onclick="changeTheme('${s.id}')" style="font-size:0.8em;">Theme</button>
         ${dnsButton}
+        <button onclick="deleteSite('${s.id}', '${s.display_name}')" style="font-size:0.8em; margin-left:5px; color:red; border: 1px solid red; background:#fff;">Delete</button>
       </td>
     </tr>`;
   }).join("");
@@ -772,6 +773,23 @@ function renderAdminPanel(user, sites, permissions, allUsers) {
             });
             if (res.ok) {
                 alert('Domain updated!');
+                window.location.reload();
+            } else {
+                const err = await res.json();
+                alert('Error: ' + (err.error || 'Unknown error'));
+            }
+        } catch (e) { alert('Network error'); }
+    }
+
+    async function deleteSite(siteId, siteName) {
+        if (!confirm('Are you sure you want to delete the site "' + siteName + '"? This will remove the CMS configuration but NOT the GitHub repository.')) return;
+        
+        try {
+            const res = await fetch('/api/admin/sites/' + siteId, {
+                method: 'DELETE'
+            });
+            if (res.ok || res.status === 204) {
+                alert('Site deleted.');
                 window.location.reload();
             } else {
                 const err = await res.json();

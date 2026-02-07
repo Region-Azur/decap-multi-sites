@@ -492,6 +492,28 @@ router.put("/admin/sites/:siteId", async (req, res) => {
   res.json({ success: true });
 });
 
+router.delete("/admin/sites/:siteId", async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+
+  const { siteId } = req.params;
+
+  const site = await db("sites").where({ id: siteId }).first();
+  if (!site) {
+    res.status(404).json({ error: "Site not found" });
+    return;
+  }
+
+  // Cleanup related data
+  await db("site_permissions").where({ site_id: siteId }).del();
+  await db("api_tokens").where({ site_id: siteId }).del();
+
+  // Delete the site
+  await db("sites").where({ id: siteId }).del();
+
+  res.status(204).send();
+});
+
 router.post("/admin/permissions", async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
