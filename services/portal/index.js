@@ -504,6 +504,9 @@ function renderDecapShell(site, token) {
          if (window.CMS) {
             console.log("Initializing CMS...");
 
+            // Force clear previous session to prevent cross-site contamination
+            localStorage.removeItem("netlify-cms-user");
+
             // Register Internal Link Component
             window.CMS.registerEditorComponent({
               id: "internal-link",
