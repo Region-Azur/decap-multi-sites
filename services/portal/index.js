@@ -232,27 +232,119 @@ async function hasPermission(user, siteId) {
 
 function renderSitePicker(user, sites) {
   const listItems = sites
-    .map(
-      (site) =>
-        `<li><a href="/admin/${site.id}">${site.display_name}</a></li>`
-    )
+    .map((site) => {
+      const settingsButton = user.is_admin
+        ? `<button class="gear" type="button" data-site-id="${site.id}" data-display-name="${site.display_name}" data-page-title="${site.page_title || ''}" data-suptitle="${site.suptitle || 'Built with Decap CMS'}" data-brand-icon="${site.brand_icon || ''}" data-favicon="${site.favicon || ''}" title="Site settings">⚙️</button>`
+        : "";
+
+      return `<li class="site-card"><a class="site-link" href="/admin/${site.id}">${site.display_name}</a>${settingsButton}</li>`;
+    })
     .join("");
 
-  const adminLink = user.is_admin
-    ? '<p><a href="/admin-panel">Admin panel</a></p>'
-    : "";
 
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <title>Decap CMS Portal</title>
+    <style>
+      body { font-family: Inter, Arial, sans-serif; background:#f6f8fb; color:#111827; }
+      .wrap { max-width: 920px; margin: 2rem auto; background: #fff; padding: 1.5rem 2rem; border-radius: 12px; box-shadow: 0 4px 22px rgba(0,0,0,.06); }
+      .top { display:flex; justify-content:space-between; align-items:center; }
+      .admin-link { background:#111827; color:#fff; padding:.4rem .7rem; border-radius:8px; text-decoration:none; }
+      ul { padding:0; list-style:none; display:grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap:10px; }
+      .site-card { display:flex; justify-content:space-between; align-items:center; border:1px solid #e5e7eb; border-radius:10px; padding:.8rem .9rem; background:#fcfcff; }
+      .site-link { text-decoration:none; color:#1f2937; font-weight:600; }
+      .site-link:hover { text-decoration:underline; }
+      .gear { border:1px solid #d1d5db; background:#fff; border-radius:8px; cursor:pointer; }
+      dialog { width: min(600px, 94vw); border: 1px solid #ddd; border-radius: 10px; }
+      .form-row { margin-bottom:.7rem; }
+      .form-row label { display:block; font-size:.9rem; margin-bottom:.2rem; }
+      .form-row input { width:100%; padding:.45rem; border:1px solid #ccc; border-radius:6px; }
+      .actions { display:flex; justify-content:flex-end; gap:.5rem; }
+    </style>
   </head>
   <body>
-    <h1>Welcome, ${user.name}</h1>
-    ${adminLink}
-    <h2>Available sites</h2>
-    <ul>${listItems || "<li>No sites assigned.</li>"}</ul>
+    <div class="wrap">
+      <div class="top">
+        <h1>Welcome, ${user.name}</h1>
+        ${user.is_admin ? '<a class="admin-link" href="/admin-panel">Admin panel</a>' : ''}
+      </div>
+      <h2>Available sites</h2>
+      <ul>${listItems || "<li>No sites assigned.</li>"}</ul>
+    </div>
+
+    <dialog id="siteSettingsDialog">
+      <form id="siteSettingsForm">
+        <h3 id="settingsTitle">Site settings</h3>
+        <input type="hidden" name="site_id" id="site_id" />
+        <div class="form-row"><label>Page Title</label><input name="page_title" id="page_title" placeholder="Aure 2"/></div>
+        <div class="form-row"><label>Suptitle</label><input name="suptitle" id="suptitle" placeholder="Built with Decap CMS"/></div>
+        <div class="form-row"><label>A icon URL (Chirpy top-left avatar)</label><input name="brand_icon" id="brand_icon" placeholder="https://.../icon.png"/></div>
+        <div class="form-row"><label>Favicon URL</label><input name="favicon" id="favicon" placeholder="https://.../favicon.ico"/></div>
+        <div class="actions">
+          <button type="button" id="cancelSettings">Cancel</button>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script>
+      const dialog = document.getElementById('siteSettingsDialog');
+      const form = document.getElementById('siteSettingsForm');
+      const cancel = document.getElementById('cancelSettings');
+
+      cancel?.addEventListener('click', () => dialog.close());
+
+      document.querySelectorAll('.gear').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.getElementById('settingsTitle').textContent = 'Site settings: ' + (btn.dataset.displayName || '');
+          document.getElementById('site_id').value = btn.dataset.siteId || '';
+          document.getElementById('page_title').value = btn.dataset.pageTitle || '';
+          document.getElementById('suptitle').value = btn.dataset.suptitle || '';
+          document.getElementById('brand_icon').value = btn.dataset.brandIcon || '';
+          document.getElementById('favicon').value = btn.dataset.favicon || '';
+          dialog.showModal();
+        });
+      });
+
+      form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        const siteId = data.site_id;
+        delete data.site_id;
+
+        try {
+          const saveRes = await fetch('/api/admin/sites/' + siteId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+
+          if (!saveRes.ok) {
+            const err = await saveRes.json();
+            alert('Save failed: ' + (err.error || 'Unknown error'));
+            return;
+          }
+
+          const deployRes = await fetch('/api/admin/sites/' + siteId + '/template', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: 'chirpy' })
+          });
+
+          if (!deployRes.ok) {
+            const err = await deployRes.json();
+            alert('Saved site settings, but Chirpy deploy failed: ' + (err.error || 'Unknown error'));
+          } else {
+            alert('Saved and deployed Chirpy settings.');
+          }
+          window.location.reload();
+        } catch (err) {
+          alert('Network error while saving settings.');
+        }
+      });
+    </script>
   </body>
 </html>`;
 }
@@ -522,8 +614,8 @@ function renderDecapShell(site, token) {
                   label: "Page",
                   widget: "relation",
                   collection: "pages",
-                  search_fields: ["title"],
-                  value_field: "path",
+                  search_fields: ["title", "body"],
+                  value_field: "{{slug}}",
                   display_fields: ["title"]
                 }
               ],
@@ -535,10 +627,18 @@ function renderDecapShell(site, token) {
                 };
               },
               toBlock: function(obj) {
-                return "[" + obj.title + "](" + obj.path + ")";
+                if (!obj.path) {
+                  return "[" + obj.title + "](#)";
+                }
+
+                const normalizedPath = String(obj.path).replace(/^\/+|\/+$/g, "");
+                return "[" + obj.title + "](/" + normalizedPath + "/)";
               },
               toPreview: function(obj) {
-                return '<a href="' + obj.path + '">' + obj.title + '</a>';
+                const previewPath = obj.path
+                  ? '/' + String(obj.path).replace(/^\/+|\/+$/g, '') + '/'
+                  : '#';
+                return '<a href="' + previewPath + '">' + obj.title + '</a>';
               }
             });
 
@@ -567,6 +667,7 @@ function renderDecapShell(site, token) {
                         fields: [
                             {label: "Title", name: "title", widget: "string"},
                             {label: "Layout", name: "layout", widget: "hidden", default: "page"},
+                            {label: "Table of contents", name: "toc", widget: "hidden", default: true},
                             {label: "Body", name: "body", widget: "markdown"}
                         ]
                     },

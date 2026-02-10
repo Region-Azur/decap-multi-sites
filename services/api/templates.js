@@ -43,13 +43,26 @@ function getStandardConfig(title, theme) {
   });
 }
 
-function getChirpyConfig(title) {
+function getChirpyConfig(title, options = {}) {
+  const {
+    pageTitle = title,
+    suptitle = 'Built with Decap CMS',
+    avatarIcon = '',
+    favicon = '',
+  } = options;
+
   return yaml.dump({
-    title: title,
-    tagline: 'Built with Decap CMS',
+    title: pageTitle,
+    tagline: suptitle,
     description: 'A minimal, responsive and feature-rich Jekyll theme for technical writing.',
     url: '', // Will be overridden by GH Pages
-    author: 'Admin',
+    author: 'Aure 2',
+    social: {
+      name: 'Aure 2',
+      links: ['https://aure2.ch']
+    },
+    avatar: avatarIcon,
+    favicon: favicon,
     theme: 'jekyll-theme-chirpy',
     theme_mode: 'light', // light, dark, manual
     lang: 'en',
@@ -66,11 +79,40 @@ function getChirpyConfig(title) {
           path: "content"
         },
         values: {
-          permalink: "/:slug/"
+          permalink: "/:slug/",
+          toc: true
         }
       }
     ]
   });
+}
+
+function getChirpyFooterOverride() {
+  return `<footer aria-label="Site info" class="site-footer h-card">
+  <p>
+    © <a href="https://aure2.ch" target="_blank" rel="noopener">Aure 2</a> 2026 . Some rights reserved.
+    <button id="license-btn" style="margin-left:.5rem; border:1px solid #cfcfcf; background:#fff; border-radius:4px; padding:.15rem .5rem; cursor:pointer;">CC BY 4.0</button>
+  </p>
+  <dialog id="license-dialog" style="max-width:680px; border-radius:8px; border:1px solid #d1d5db; padding:1rem 1.2rem;">
+    <p>
+      Except where otherwise noted, the blog posts on this site are licensed under the
+      <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons Attribution 4.0 International (CC BY 4.0)</a>
+      License by the author.
+    </p>
+    <form method="dialog"><button>Close</button></form>
+  </dialog>
+  <script>
+    (() => {
+      const btn = document.getElementById('license-btn');
+      const dialog = document.getElementById('license-dialog');
+      if (!btn || !dialog) return;
+      btn.addEventListener('click', () => {
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+      });
+    })();
+  </script>
+</footer>
+`;
 }
 
 function getChirpyWorkflow() {
@@ -182,7 +224,7 @@ jobs:
 `;
 }
 
-function getTemplateFiles(theme, title) {
+function getTemplateFiles(theme, title, options = {}) {
   const files = {};
 
   // Common Index Content (Decap-editable in content folder)
@@ -190,6 +232,7 @@ function getTemplateFiles(theme, title) {
 title: Home
 layout: page
 permalink: /
+toc: true
 tags:
   - page
 ---
@@ -197,6 +240,12 @@ tags:
 # Welcome to ${title}
 
 This site is managed by Decap CMS.
+
+## Getting Started
+
+Use Decap CMS to create pages and posts.
+
+## Next Steps
 
 Edit this page in Decap CMS.
 `;
@@ -206,7 +255,7 @@ Edit this page in Decap CMS.
 
   if (isChirpy) {
     // Advanced setup for Chirpy
-    files['_config.yml'] = getChirpyConfig(title);
+    files['_config.yml'] = getChirpyConfig(title, options);
     files['Gemfile'] = `source "https://rubygems.org"
 gem "jekyll"
 gem "jekyll-theme-chirpy"
@@ -218,6 +267,7 @@ gem "jekyll-theme-chirpy"
   icon: "fab fa-github"
   url: "https://github.com/cotes2020/jekyll-theme-chirpy"
 `;
+    files['_includes/footer.html'] = getChirpyFooterOverride();
     // Workflow for Actions
     files['.github/workflows/pages.yml'] = getChirpyWorkflow();
   } else {
