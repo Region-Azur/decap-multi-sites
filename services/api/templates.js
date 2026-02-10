@@ -51,6 +51,10 @@ function getChirpyConfig(title, options = {}) {
     favicon = '',
   } = options;
 
+  const normalizedAvatarIcon = (avatarIcon || '').trim();
+  const normalizedFavicon = (favicon || '').trim();
+  const effectiveFavicon = normalizedFavicon || normalizedAvatarIcon;
+
   return yaml.dump({
     title: pageTitle,
     tagline: suptitle,
@@ -61,8 +65,8 @@ function getChirpyConfig(title, options = {}) {
       name: 'Aure 2',
       links: ['https://aure2.ch']
     },
-    avatar: avatarIcon,
-    favicon: favicon,
+    ...(normalizedAvatarIcon ? { avatar: normalizedAvatarIcon } : {}),
+    ...(effectiveFavicon ? { favicon: effectiveFavicon } : {}),
     theme: 'jekyll-theme-chirpy',
     theme_mode: 'light', // light, dark, manual
     lang: 'en',
