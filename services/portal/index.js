@@ -631,12 +631,12 @@ function renderDecapShell(site, token) {
                   return "[" + obj.title + "](#)";
                 }
 
-                const normalizedPath = String(obj.path).replace(/^\/+|\/+$/g, "");
+                const normalizedPath = String(obj.path).replace(/^\\/+|\\/+$/g, "");
                 return "[" + obj.title + "](/" + normalizedPath + "/)";
               },
               toPreview: function(obj) {
                 const previewPath = obj.path
-                  ? '/' + String(obj.path).replace(/^\/+|\/+$/g, '') + '/'
+                  ? '/' + String(obj.path).replace(/^\\/+|\\/+$/g, '') + '/'
                   : '#';
                 return '<a href="' + previewPath + '">' + obj.title + '</a>';
               }
