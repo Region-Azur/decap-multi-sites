@@ -156,36 +156,93 @@ async function getOctokit() {
 
 async function commitMultipleFiles(octokit, owner, repo, branch, filesMap, message) {
   try {
-    // 1. Get current commit (HEAD)
-    const { data: refData } = await octokit.git.getRef({
-      owner, repo, ref: `heads/${branch}`
-    });
-    const commitSha = refData.object.sha;
-
-    // 2. Get current tree
-    const { data: commitData } = await octokit.git.getCommit({
-      owner, repo, commit_sha: commitSha
-    });
-    const treeSha = commitData.tree.sha;
-
-    // 3. Create blobs for each file (optional, but cleaner for large content) or just use content inline
-    // We'll construct the tree array directly.
     const tree = [];
     for (const [path, content] of Object.entries(filesMap)) {
       tree.push({
         path,
-        mode: '100644', // file (blob)
+        mode: '100644',
         type: 'blob',
         content
       });
     }
 
-    // 4. Create new tree
+    let commitSha;
+    let treeSha;
+
+    try {
+      // Existing branch path
+      const { data: refData } = await octokit.git.getRef({
+        owner, repo, ref: `heads/${branch}`
+      });
+      commitSha = refData.object.sha;
+
+      const { data: commitData } = await octokit.git.getCommit({
+        owner, repo, commit_sha: commitSha
+      });
+      treeSha = commitData.tree.sha;
+    } catch (refErr) {
+      if (refErr.status !== 404) {
+        throw refErr;
+      }
+
+      // Branch does not exist: either empty repo or different default branch.
+      const { data: repoData } = await octokit.repos.get({ owner, repo });
+
+      if (repoData.size === 0) {
+        // Empty repo: create initial commit and branch from scratch.
+        const { data: initialTree } = await octokit.git.createTree({
+          owner,
+          repo,
+          tree,
+        });
+
+        const { data: initialCommit } = await octokit.git.createCommit({
+          owner,
+          repo,
+          message,
+          tree: initialTree.sha,
+          parents: [],
+        });
+
+        await octokit.git.createRef({
+          owner,
+          repo,
+          ref: `refs/heads/${branch}`,
+          sha: initialCommit.sha,
+        });
+
+        console.log(`DEBUG: Atomic initial commit successful: ${initialCommit.sha}`);
+        return initialCommit.sha;
+      }
+
+      // Non-empty repo but branch missing: create branch from repository default branch.
+      const defaultBranch = repoData.default_branch;
+      const { data: defaultRef } = await octokit.git.getRef({
+        owner,
+        repo,
+        ref: `heads/${defaultBranch}`,
+      });
+
+      await octokit.git.createRef({
+        owner,
+        repo,
+        ref: `refs/heads/${branch}`,
+        sha: defaultRef.object.sha,
+      });
+
+      commitSha = defaultRef.object.sha;
+      const { data: commitData } = await octokit.git.getCommit({
+        owner,
+        repo,
+        commit_sha: commitSha,
+      });
+      treeSha = commitData.tree.sha;
+    }
+
     const { data: newTree } = await octokit.git.createTree({
       owner, repo, base_tree: treeSha, tree
     });
 
-    // 5. Create new commit
     const { data: newCommit } = await octokit.git.createCommit({
       owner, repo,
       message,
@@ -193,7 +250,6 @@ async function commitMultipleFiles(octokit, owner, repo, branch, filesMap, messa
       parents: [commitSha]
     });
 
-    // 6. Update reference
     await octokit.git.updateRef({
       owner, repo,
       ref: `heads/${branch}`,
@@ -337,8 +393,8 @@ router.post("/admin/sites", async (req, res) => {
     // 2. Enable GitHub Pages
     try {
       console.log(`DEBUG: Enabling GitHub Pages for ${github_repo}...`);
-      const buildType = theme === 'chirpy' ? 'workflow' : 'legacy';
-      const source = buildType === 'legacy' ? { branch, path: '/' } : undefined;
+      const buildType = 'workflow';
+      const source = undefined;
 
       await octokit.repos.createPagesSite({
         owner,
@@ -402,7 +458,7 @@ router.post("/admin/sites/:siteId/template", async (req, res) => {
 
 
     // Update Pages settings
-    const buildType = theme === 'chirpy' ? 'workflow' : 'legacy';
+    const buildType = 'workflow';
     // Note: Updating existing pages sites via API can be tricky if they exist. 
     // We catch errors.
     try {
@@ -413,14 +469,14 @@ router.post("/admin/sites/:siteId/template", async (req, res) => {
         await octokit.repos.updateInformationAboutPagesSite({
           owner, repo,
           build_type: buildType,
-          source: buildType === 'legacy' ? { branch: site.branch, path: '/' } : undefined
+          source: undefined
         });
       } catch (e) {
         // Create
         await octokit.repos.createPagesSite({
           owner, repo,
           build_type: buildType,
-          source: buildType === 'legacy' ? { branch: site.branch, path: '/' } : undefined
+          source: undefined
         });
       }
     } catch (e) {
