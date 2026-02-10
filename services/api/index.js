@@ -21,6 +21,10 @@ const API_BODY_LIMIT = process.env.API_BODY_LIMIT || "2mb";
 const app = express();
 const db = createDb(DATABASE_URL);
 
+function getAnonymizedDecapCommitMessage() {
+  return "Decap";
+}
+
 app.use(express.json({ limit: API_BODY_LIMIT }));
 
 // Debug middleware to check incoming paths (fix 404 issues)
@@ -352,6 +356,10 @@ router.post("/admin/sites", async (req, res) => {
     content_path = "content",
     media_path = "static/uploads/",
     domain = null,
+    page_title = null,
+    suptitle = "Built with Decap CMS",
+    brand_icon = null,
+    favicon = null,
     enabled = true,
     theme = "minima" // Default theme
   } = req.body;
@@ -369,6 +377,10 @@ router.post("/admin/sites", async (req, res) => {
     content_path,
     media_path,
     domain,
+    page_title,
+    suptitle,
+    brand_icon,
+    favicon,
     enabled: Boolean(enabled),
   });
 
@@ -376,7 +388,12 @@ router.post("/admin/sites", async (req, res) => {
   try {
     const octokit = await getOctokit();
     const { owner, repo } = parseRepo(github_repo);
-    const templateUrls = getTemplateFiles(theme, display_name);
+    const templateUrls = getTemplateFiles(theme, display_name, {
+      pageTitle: page_title || display_name,
+      suptitle: suptitle || 'Built with Decap CMS',
+      avatarIcon: brand_icon || '',
+      favicon: favicon || '',
+    });
 
     // 1. Commit Template Files
     // We need to fetch current tree or just update files individually?
@@ -451,7 +468,12 @@ router.post("/admin/sites/:siteId/template", async (req, res) => {
   try {
     const octokit = await getOctokit();
     const { owner, repo } = parseRepo(site.github_repo);
-    const templateFiles = getTemplateFiles(theme, site.display_name);
+    const templateFiles = getTemplateFiles(theme, site.display_name, {
+      pageTitle: site.page_title || site.display_name,
+      suptitle: site.suptitle || 'Built with Decap CMS',
+      avatarIcon: site.brand_icon || '',
+      favicon: site.favicon || '',
+    });
 
     console.log(`DEBUG: Re-applying theme '${theme}' to ${site.github_repo}...`);
     await commitMultipleFiles(octokit, owner, repo, site.branch, templateFiles, `Update theme: ${theme}`);
@@ -495,7 +517,7 @@ router.put("/admin/sites/:siteId", async (req, res) => {
   if (!admin) return;
 
   const { siteId } = req.params;
-  const { domain, display_name, branch, enabled } = req.body;
+  const { domain, display_name, branch, enabled, page_title, suptitle, brand_icon, favicon } = req.body;
 
   const site = await db("sites").where({ id: siteId }).first();
   if (!site) {
@@ -508,6 +530,10 @@ router.put("/admin/sites/:siteId", async (req, res) => {
     domain: domain !== undefined ? domain : site.domain,
     display_name: display_name || site.display_name,
     branch: branch || site.branch,
+    page_title: page_title !== undefined ? page_title : site.page_title,
+    suptitle: suptitle !== undefined ? suptitle : site.suptitle,
+    brand_icon: brand_icon !== undefined ? brand_icon : site.brand_icon,
+    favicon: favicon !== undefined ? favicon : site.favicon,
     enabled: enabled !== undefined ? Boolean(enabled) : site.enabled
   });
 
@@ -720,7 +746,7 @@ router.put("/sites/:siteId/contents", async (req, res) => {
     owner,
     repo,
     path,
-    message: message || `[cms] ${user.email} update ${path}`,
+    message: getAnonymizedDecapCommitMessage(),
     content:
       encoding === "base64" ? content : Buffer.from(content).toString("base64"),
     branch: site.branch,
@@ -758,7 +784,7 @@ router.delete("/sites/:siteId/contents", async (req, res) => {
     owner,
     repo,
     path,
-    message: message || `[cms] ${user.email} delete ${path}`,
+    message: getAnonymizedDecapCommitMessage(),
     sha,
     branch: site.branch,
   });
@@ -825,6 +851,18 @@ router.all("/github/*", async (req, res) => {
   const path = req.params[0]; // Capture the * part
   let method = req.method;
   const body = req.body;
+  const proxiedBody = body && typeof body === "object"
+    ? { ...body }
+    : body;
+
+  if (
+    proxiedBody &&
+    typeof proxiedBody === "object" &&
+    ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
+    Object.prototype.hasOwnProperty.call(proxiedBody, "message")
+  ) {
+    proxiedBody.message = getAnonymizedDecapCommitMessage();
+  }
   let finalPath = path;
 
   // Context-aware proxying for generic requests (e.g., /branches/main)
@@ -961,18 +999,18 @@ router.all("/github/*", async (req, res) => {
           } else {
             console.log(`DEBUG: Could not resolve SHA for path '${path}'. Falling back to original request.`);
             // Fallback to original if not found (404 likely)
-            response = await octokit.request(`${method} /${finalPath}`, { data: body });
+            response = await octokit.request(`${method} /${finalPath}`, { data: proxiedBody });
           }
 
         } catch (walkErr) {
           console.error(`DEBUG: Manual walk failed: ${walkErr.message}. Falling back.`);
-          response = await octokit.request(`${method} /${finalPath}`, { data: body });
+          response = await octokit.request(`${method} /${finalPath}`, { data: proxiedBody });
         }
       } else {
-        response = await octokit.request(`${method} /${finalPath}`, { data: body });
+        response = await octokit.request(`${method} /${finalPath}`, { data: proxiedBody });
       }
     } else {
-      response = await octokit.request(`${method} /${finalPath}`, { data: body });
+      response = await octokit.request(`${method} /${finalPath}`, { data: proxiedBody });
     }
 
     if (finalPath.includes("/contents/") || finalPath.includes("/git/trees/")) {
@@ -1044,7 +1082,7 @@ router.all("/github/*", async (req, res) => {
 
           // Retry the original request
           const retryResponse = await octokit.request(`${method} /${finalPath}`, {
-            data: body,
+            data: proxiedBody,
           });
           res.status(retryResponse.status).json(retryResponse.data);
           return;

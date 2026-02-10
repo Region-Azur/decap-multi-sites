@@ -71,6 +71,10 @@ async function ensureSchema(db) {
       table.string("content_path").notNullable().defaultTo("content");
       table.string("media_path").notNullable().defaultTo("static/uploads/");
       table.string("domain").nullable(); // Custom domain support
+      table.string("page_title").nullable();
+      table.string("suptitle").nullable();
+      table.string("brand_icon").nullable();
+      table.string("favicon").nullable();
       table.boolean("enabled").notNullable().defaultTo(true);
     });
   } else {
@@ -79,6 +83,34 @@ async function ensureSchema(db) {
     if (!hasDomain) {
       await db.schema.table("sites", (table) => {
         table.string("domain").nullable();
+      });
+    }
+
+    const hasPageTitle = await db.schema.hasColumn("sites", "page_title");
+    if (!hasPageTitle) {
+      await db.schema.table("sites", (table) => {
+        table.string("page_title").nullable();
+      });
+    }
+
+    const hasSuptitle = await db.schema.hasColumn("sites", "suptitle");
+    if (!hasSuptitle) {
+      await db.schema.table("sites", (table) => {
+        table.string("suptitle").nullable();
+      });
+    }
+
+    const hasBrandIcon = await db.schema.hasColumn("sites", "brand_icon");
+    if (!hasBrandIcon) {
+      await db.schema.table("sites", (table) => {
+        table.string("brand_icon").nullable();
+      });
+    }
+
+    const hasFavicon = await db.schema.hasColumn("sites", "favicon");
+    if (!hasFavicon) {
+      await db.schema.table("sites", (table) => {
+        table.string("favicon").nullable();
       });
     }
   }
