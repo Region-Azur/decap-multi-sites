@@ -711,8 +711,10 @@ function renderDecapShell(site, token) {
                         create: true,
                         fields: [
                             {label: "Title", name: "title", widget: "string"},
-                            {label: "Layout", name: "layout", widget: "hidden", default: "page"},
-                            {label: "Table of contents", name: "toc", widget: "hidden", default: true},
+                            {label: "Layout", name: "layout", widget: "select", default: "post", options: ["post", "page"]},
+                            {label: "Posted", name: "date", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", default: "{{now}}", required: false},
+                            {label: "Updated", name: "last_modified_at", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", required: false},
+                            {label: "Table of contents", name: "toc", widget: "boolean", default: true, required: false},
                             {label: "Body", name: "body", widget: "markdown"}
                         ]
                     },
@@ -1169,7 +1171,7 @@ app.get("/configs/:siteId.yml", async (req, res) => {
     return;
   }
 
-  const config = `backend: \n  name: git-gateway\n  api_root: ${API_BASE_URL}/.netlify/git\n  repo: ${site.github_repo}\n  branch: ${site.branch}\nmedia_folder: ${site.media_path}\npublic_folder: ${site.media_path}\ncollections: \n - name: "pages"\n    label: "Pages"\n    folder: "${site.content_path}"\n    create: true\n    fields: \n      - { label: "Title", name: "title", widget: "string" }\n      - { label: "Body", name: "body", widget: "markdown" }\n`;
+  const config = `backend: \n  name: git-gateway\n  api_root: ${API_BASE_URL}/.netlify/git\n  repo: ${site.github_repo}\n  branch: ${site.branch}\nmedia_folder: ${site.media_path}\npublic_folder: ${site.media_path}\ncollections: \n - name: "pages"\n    label: "Pages"\n    folder: "${site.content_path}"\n    create: true\n    fields: \n      - { label: "Title", name: "title", widget: "string" }\n      - { label: "Layout", name: "layout", widget: "select", default: "post", options: ["post", "page"] }\n      - { label: "Posted", name: "date", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", default: "{{now}}", required: false }\n      - { label: "Updated", name: "last_modified_at", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", required: false }\n      - { label: "Table of contents", name: "toc", widget: "boolean", default: true, required: false }\n      - { label: "Body", name: "body", widget: "markdown" }\n`;
   res.type("text/yaml").send(config);
 });
 
