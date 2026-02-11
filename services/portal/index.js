@@ -261,6 +261,7 @@ function renderSitePicker(user, sites) {
       .form-row { margin-bottom:.7rem; }
       .form-row label { display:block; font-size:.9rem; margin-bottom:.2rem; }
       .form-row input { width:100%; padding:.45rem; border:1px solid #ccc; border-radius:6px; }
+      .hint { margin:.2rem 0 0; font-size:.8rem; color:#4b5563; }
       .actions { display:flex; justify-content:flex-end; gap:.5rem; }
     </style>
   </head>
@@ -280,8 +281,19 @@ function renderSitePicker(user, sites) {
         <input type="hidden" name="site_id" id="site_id" />
         <div class="form-row"><label>Page Title</label><input name="page_title" id="page_title" placeholder="Aure 2"/></div>
         <div class="form-row"><label>Suptitle</label><input name="suptitle" id="suptitle" placeholder="Built with Decap CMS"/></div>
-        <div class="form-row"><label>A icon URL (Chirpy top-left avatar)</label><input name="brand_icon" id="brand_icon" placeholder="https://.../icon.png"/></div>
-        <div class="form-row"><label>Favicon URL</label><input name="favicon" id="favicon" placeholder="https://.../favicon.ico"/></div>
+        <div class="form-row">
+          <label>A icon URL (Chirpy top-left avatar)</label>
+          <input name="brand_icon" id="brand_icon" placeholder="https://.../icon.png"/>
+          <p class="hint">Or upload an image file:</p>
+          <input type="file" id="brand_icon_file" accept="image/*"/>
+        </div>
+        <div class="form-row">
+          <label>Favicon URL</label>
+          <input name="favicon" id="favicon" placeholder="https://.../favicon.ico"/>
+          <p class="hint">Or upload an image file:</p>
+          <input type="file" id="favicon_file" accept="image/*"/>
+          <p class="hint">If no favicon is set, the A icon is used automatically. If both are empty, behavior stays the same as today.</p>
+        </div>
         <div class="actions">
           <button type="button" id="cancelSettings">Cancel</button>
           <button type="submit">Save</button>
@@ -293,8 +305,39 @@ function renderSitePicker(user, sites) {
       const dialog = document.getElementById('siteSettingsDialog');
       const form = document.getElementById('siteSettingsForm');
       const cancel = document.getElementById('cancelSettings');
+      const brandIconInput = document.getElementById('brand_icon');
+      const faviconInput = document.getElementById('favicon');
+      const brandIconFileInput = document.getElementById('brand_icon_file');
+      const faviconFileInput = document.getElementById('favicon_file');
 
-      cancel?.addEventListener('click', () => dialog.close());
+      async function readAsDataUrl(file) {
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Could not read file'));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      async function handleFileSelection(fileInput, targetInput) {
+        const [file] = fileInput.files || [];
+        if (!file) return;
+        try {
+          targetInput.value = await readAsDataUrl(file);
+        } catch (_err) {
+          alert('Failed to read selected file. Please try another file.');
+          fileInput.value = '';
+        }
+      }
+
+      brandIconFileInput?.addEventListener('change', () => handleFileSelection(brandIconFileInput, brandIconInput));
+      faviconFileInput?.addEventListener('change', () => handleFileSelection(faviconFileInput, faviconInput));
+
+      cancel?.addEventListener('click', () => {
+        if (brandIconFileInput) brandIconFileInput.value = '';
+        if (faviconFileInput) faviconFileInput.value = '';
+        dialog.close();
+      });
 
       document.querySelectorAll('.gear').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -304,6 +347,8 @@ function renderSitePicker(user, sites) {
           document.getElementById('suptitle').value = btn.dataset.suptitle || '';
           document.getElementById('brand_icon').value = btn.dataset.brandIcon || '';
           document.getElementById('favicon').value = btn.dataset.favicon || '';
+          if (brandIconFileInput) brandIconFileInput.value = '';
+          if (faviconFileInput) faviconFileInput.value = '';
           dialog.showModal();
         });
       });
