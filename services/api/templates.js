@@ -152,12 +152,13 @@ jobs:
           ruby-version: 3.2
           bundler-cache: true
 
-      - name: Setup Pages
+      - name: Setup Pages (best-effort)
         id: pages
+        continue-on-error: true
         uses: actions/configure-pages@v5
 
       - name: Build with Jekyll
-        run: count=$(find . -maxdepth 1 -name '_config.yml' | wc -l); if [[ $count == 0 ]]; then echo "No _config.yml found"; exit 1; fi; bundle exec jekyll b -d "_site" --baseurl "\${{ steps.pages.outputs.base_path }}"
+        run: count=$(find . -maxdepth 1 -name '_config.yml' | wc -l); if [[ $count == 0 ]]; then echo "No _config.yml found"; exit 1; fi; bundle exec jekyll b -d "_site" --baseurl "\${{ steps.pages.outputs.base_path || '' }}"
         env:
           JEKYLL_ENV: production
 
@@ -202,8 +203,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Pages
+      - name: Setup Pages (best-effort)
         id: pages
+        continue-on-error: true
         uses: actions/configure-pages@v5
 
       - name: Build with Jekyll
