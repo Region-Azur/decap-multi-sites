@@ -576,6 +576,12 @@ function renderDecapShell(site, token) {
   const repoName = (site.github_repo || "").split("/")[1] || "";
   const hasCustomDomain = Boolean((site.domain || "").trim());
   const internalLinkPrefix = hasCustomDomain || !repoName ? "" : `/${repoName}`;
+  const safeApiBaseUrl = JSON.stringify(API_BASE_URL);
+  const safeToken = JSON.stringify(token);
+  const safeRepo = JSON.stringify(site.github_repo || "");
+  const safeBranch = JSON.stringify(site.branch || "main");
+  const safeMediaPath = JSON.stringify(site.media_path || "");
+  const safeContentPath = JSON.stringify(site.content_path || "");
   return `<!doctype html>
 <html>
   <head>
@@ -590,13 +596,13 @@ function renderDecapShell(site, token) {
     <script>
       // Hoist Netlify Identity Mock to HEAD so it exists before Decap CMS loads
       window.mockUser = {
-          url: "${API_BASE_URL}",
+          url: ${safeApiBaseUrl},
           backend: { name: "git-gateway" },
           api: {
             request: (path) => { console.log("Mock API Request:", path); return Promise.resolve(); }
           },
           token: {
-              access_token: "${token}",
+              access_token: ${safeToken},
               refresh_token: "dummy-refresh-token",
               token_type: "Bearer",
               expires_in: 3600,
@@ -606,7 +612,7 @@ function renderDecapShell(site, token) {
           email: "auto-login@example.com", 
           user_metadata: { full_name: "Auto User" },
           app_metadata: { provider: "email" },
-          jwt: (force) => Promise.resolve("${token}"),
+          jwt: (force) => Promise.resolve(${safeToken}),
           logout: () => Promise.resolve()
       };
 
@@ -632,13 +638,13 @@ function renderDecapShell(site, token) {
           logout: () => { console.log("Netlify Identity Widget logout."); },
           open: () => { console.log("Netlify Identity Open called (Mock)"); },
           init: () => { console.log("Netlify Identity Init called (Mock)"); },
-          refresh: () => Promise.resolve("${token}")
+          refresh: () => Promise.resolve(${safeToken})
       };
     </script>
   </head>
 
   <body>
-    <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
+    <script src="https://unpkg.com/decap-cms@3.10.0/dist/decap-cms.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", async function() {
          if (window.CMS) {
@@ -720,23 +726,23 @@ function renderDecapShell(site, token) {
             const config = {
                 backend: {
                     name: 'git-gateway',
-                    api_root: '${API_BASE_URL}/.netlify/git',
-                    gateway_url: '${API_BASE_URL}/.netlify/git', // Legacy fallback restored
-                    repo: '${site.github_repo}', 
-                    branch: '${site.branch}',
+                    api_root: ${safeApiBaseUrl} + '/.netlify/git',
+                    gateway_url: ${safeApiBaseUrl} + '/.netlify/git', // Legacy fallback restored
+                    repo: ${safeRepo},
+                    branch: ${safeBranch},
                     squash_merges: true
                 },
-                site_url: '${API_BASE_URL}',
-                display_url: '${API_BASE_URL}',
+                site_url: ${safeApiBaseUrl},
+                display_url: ${safeApiBaseUrl},
                 logo_url: 'https://decapcms.org/img/decap-logo.svg',
                 locale: 'en',
-                media_folder: '${site.media_path}',
-                public_folder: '${site.media_path}',
+                media_folder: ${safeMediaPath},
+                public_folder: ${safeMediaPath},
                 collections: [
                     {
                         name: "pages",
                         label: "Pages",
-                        folder: "${site.content_path}",
+                        folder: ${safeContentPath},
                         create: true,
                         fields: [
                             {label: "Title", name: "title", widget: "string"},
@@ -761,7 +767,7 @@ function renderDecapShell(site, token) {
                 // Pass the token in the header to authenticate with the API
                 const res = await fetch('/api/user', {
                     headers: {
-                        'Authorization': 'Bearer ${token}'
+                        'Authorization': 'Bearer ' + ${safeToken}
                     }
                 });
                 console.log("Fetch / api / user status: " + res.status);
