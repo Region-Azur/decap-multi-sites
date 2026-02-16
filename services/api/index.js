@@ -21,8 +21,62 @@ const API_BODY_LIMIT = process.env.API_BODY_LIMIT || "2mb";
 const app = express();
 const db = createDb(DATABASE_URL);
 
-function getAnonymizedDecapCommitMessage() {
-  return "Decap";
+const DECAP_COMMITTER = {
+  name: "Decap",
+  email: "decap@users.noreply.github.com",
+};
+
+function getAnonymizedDecapCommitMessage(originalMessage, filePath = "", method = "") {
+  const cleanedOriginal = typeof originalMessage === "string"
+    ? originalMessage
+      .replace(/\s+by\s+.+$/i, "")
+      .replace(/\s*\([^)]*@[\w.-]+\)\s*$/i, "")
+      .trim()
+    : "";
+
+  if (cleanedOriginal) {
+    return cleanedOriginal;
+  }
+
+  const filename = (filePath || "").split("/").filter(Boolean).pop() || "content";
+  const pageName = filename.replace(/\.[^.]+$/, "") || "content";
+  const action = String(method || "").toUpperCase() === "DELETE" ? "Deleting" : "Updating";
+  return `${action} Page: ${pageName}`;
+}
+
+
+function enrichChirpyFrontMatter(content, filePath) {
+  if (typeof content !== "string") {
+    return content;
+  }
+
+  const normalizedPath = String(filePath || "").toLowerCase();
+  if (!normalizedPath.endsWith(".md") && !normalizedPath.endsWith(".markdown")) {
+    return content;
+  }
+
+  const frontMatterMatch = content.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!frontMatterMatch) {
+    return content;
+  }
+
+  const nowIso = new Date().toISOString();
+  const frontMatterRaw = frontMatterMatch[1];
+  const hasDate = /^date\s*:/m.test(frontMatterRaw);
+  const hasUpdated = /^last_modified_at\s*:/m.test(frontMatterRaw);
+
+  let updatedFrontMatter = frontMatterRaw;
+  if (!hasDate) {
+    updatedFrontMatter += `\ndate: ${nowIso}`;
+  }
+
+  if (hasUpdated) {
+    updatedFrontMatter = updatedFrontMatter.replace(/^last_modified_at\s*:.*$/m, `last_modified_at: ${nowIso}`);
+  } else {
+    updatedFrontMatter += `\nlast_modified_at: ${nowIso}`;
+  }
+
+  return content.replace(/^---\n([\s\S]*?)\n---\n?/, `---\n${updatedFrontMatter}\n---\n`);
 }
 
 app.use(express.json({ limit: API_BODY_LIMIT }));
@@ -742,14 +796,20 @@ router.put("/sites/:siteId/contents", async (req, res) => {
 
   const octokit = await getOctokit();
   const { owner, repo } = parseRepo(site.github_repo);
+  const normalizedContent = encoding === "base64"
+    ? Buffer.from(content, "base64").toString("utf8")
+    : content;
+  const preparedContent = enrichChirpyFrontMatter(normalizedContent, path);
+
   const payload = {
     owner,
     repo,
     path,
-    message: getAnonymizedDecapCommitMessage(),
-    content:
-      encoding === "base64" ? content : Buffer.from(content).toString("base64"),
+    message: getAnonymizedDecapCommitMessage(message, path, "PUT"),
+    content: Buffer.from(preparedContent).toString("base64"),
     branch: site.branch,
+    committer: DECAP_COMMITTER,
+    author: DECAP_COMMITTER,
   };
 
   if (sha) {
@@ -784,9 +844,11 @@ router.delete("/sites/:siteId/contents", async (req, res) => {
     owner,
     repo,
     path,
-    message: getAnonymizedDecapCommitMessage(),
+    message: getAnonymizedDecapCommitMessage(message, path, "DELETE"),
     sha,
     branch: site.branch,
+    committer: DECAP_COMMITTER,
+    author: DECAP_COMMITTER,
   });
 
   res.json(response.data);
@@ -861,7 +923,16 @@ router.all("/github/*", async (req, res) => {
     ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
     Object.prototype.hasOwnProperty.call(proxiedBody, "message")
   ) {
-    proxiedBody.message = getAnonymizedDecapCommitMessage();
+    proxiedBody.message = getAnonymizedDecapCommitMessage(proxiedBody.message, proxiedBody.path, method);
+  }
+
+  if (proxiedBody && typeof proxiedBody === "object" && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    if (Object.prototype.hasOwnProperty.call(proxiedBody, "author")) {
+      proxiedBody.author = DECAP_COMMITTER;
+    }
+    if (Object.prototype.hasOwnProperty.call(proxiedBody, "committer")) {
+      proxiedBody.committer = DECAP_COMMITTER;
+    }
   }
   let finalPath = path;
 

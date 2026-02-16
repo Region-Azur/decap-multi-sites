@@ -36,7 +36,7 @@ function getStandardConfig(title, theme) {
           path: "content"
         },
         values: {
-          permalink: "/:slug/"
+          permalink: "/:basename/"
         }
       }
     ]
@@ -68,7 +68,7 @@ function getChirpyConfig(title, options = {}) {
     ...(normalizedAvatarIcon ? { avatar: normalizedAvatarIcon } : {}),
     ...(effectiveFavicon ? { favicon: effectiveFavicon } : {}),
     theme: 'jekyll-theme-chirpy',
-    theme_mode: 'light', // light, dark, manual
+    theme_mode: 'manual', // light, dark, manual
     lang: 'en',
     timezone: 'UTC',
     collections: {
@@ -83,7 +83,7 @@ function getChirpyConfig(title, options = {}) {
           path: "content"
         },
         values: {
-          permalink: "/:slug/",
+          permalink: "/:basename/",
           toc: true
         }
       }
@@ -94,27 +94,17 @@ function getChirpyConfig(title, options = {}) {
 function getChirpyFooterOverride() {
   return `<footer aria-label="Site info" class="site-footer h-card">
   <p>
-    © <a href="https://aure2.ch" target="_blank" rel="noopener">Aure 2</a> 2026 . Some rights reserved.
-    <button id="license-btn" style="margin-left:.5rem; border:1px solid #cfcfcf; background:#fff; border-radius:4px; padding:.15rem .5rem; cursor:pointer;">CC BY 4.0</button>
+    © <time>2026</time> Region Azur. <span data-bs-toggle="tooltip" data-bs-placement="top" title="Except where otherwise noted, the blog posts on this site are licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0) License by the author.">Some rights reserved.</span>
   </p>
-  <dialog id="license-dialog" style="max-width:680px; border-radius:8px; border:1px solid #d1d5db; padding:1rem 1.2rem;">
+  <p>
+    Using the <a data-bs-toggle="tooltip" data-bs-placement="top" href="https://github.com/cotes2020/jekyll-theme-chirpy" target="_blank" rel="noopener" title="v7.4.1">Chirpy</a> theme for <a href="https://jekyllrb.com" target="_blank" rel="noopener">Jekyll</a>.
+  </p>
+  <noscript>
     <p>
       Except where otherwise noted, the blog posts on this site are licensed under the
-      <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons Attribution 4.0 International (CC BY 4.0)</a>
-      License by the author.
+      <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons Attribution 4.0 International (CC BY 4.0)</a> License by the author.
     </p>
-    <form method="dialog"><button>Close</button></form>
-  </dialog>
-  <script>
-    (() => {
-      const btn = document.getElementById('license-btn');
-      const dialog = document.getElementById('license-dialog');
-      if (!btn || !dialog) return;
-      btn.addEventListener('click', () => {
-        if (typeof dialog.showModal === 'function') dialog.showModal();
-      });
-    })();
-  </script>
+  </noscript>
 </footer>
 `;
 }
@@ -256,6 +246,29 @@ Use Decap CMS to create pages and posts.
 ## Next Steps
 
 Edit this page in Decap CMS.
+`;
+
+  // Block indexing by search engines and common AI crawlers
+  files['robots.txt'] = `User-agent: *
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
 `;
 
   // Detect Chirpy variants
