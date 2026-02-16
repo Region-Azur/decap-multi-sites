@@ -573,6 +573,9 @@ function renderAdminPanel(user, sites, permissions) {
 
 function renderDecapShell(site, token) {
   const siteId = site.id;
+  const repoName = (site.github_repo || "").split("/")[1] || "";
+  const hasCustomDomain = Boolean((site.domain || "").trim());
+  const internalLinkPrefix = hasCustomDomain || !repoName ? "" : `/${repoName}`;
   return `<!doctype html>
 <html>
   <head>
@@ -645,6 +648,38 @@ function renderDecapShell(site, token) {
             localStorage.removeItem("netlify-cms-user");
 
             // Register Internal Link Component
+            const internalLinkPrefix = ${JSON.stringify(internalLinkPrefix)};
+            const normalizePageSlug = function(value) {
+              const rawValue = String(value || "").trim();
+              if (!rawValue) {
+                return "";
+              }
+
+              const withoutProtocol = rawValue.replace(/^https?:\/\/[^/]+/i, "");
+              let normalized = withoutProtocol.replace(/^\/+|\/+$/g, "");
+
+              if (internalLinkPrefix) {
+                const normalizedPrefix = internalLinkPrefix.replace(/^\/+|\/+$/g, "");
+                if (normalized === normalizedPrefix) {
+                  return "";
+                }
+                if (normalized.startsWith(normalizedPrefix + "/")) {
+                  normalized = normalized.slice(normalizedPrefix.length + 1);
+                }
+              }
+
+              return normalized;
+            };
+
+            const buildInternalLink = function(pageSlug) {
+              const normalizedSlug = normalizePageSlug(pageSlug);
+              if (!normalizedSlug) {
+                return "#";
+              }
+
+              return (internalLinkPrefix || "") + "/" + normalizedSlug + "/";
+            };
+
             window.CMS.registerEditorComponent({
               id: "internal-link",
               label: "Internal Link",
@@ -668,21 +703,15 @@ function renderDecapShell(site, token) {
               fromBlock: function(match) {
                 return {
                   title: match[1],
-                  path: match[2]
+                  path: normalizePageSlug(match[2])
                 };
               },
               toBlock: function(obj) {
-                if (!obj.path) {
-                  return "[" + obj.title + "](#)";
-                }
-
-                const normalizedPath = String(obj.path).replace(/^\\/+|\\/+$/g, "");
-                return "[" + obj.title + "](/" + normalizedPath + "/)";
+                const finalPath = buildInternalLink(obj.path);
+                return "[" + obj.title + "](" + finalPath + ")";
               },
               toPreview: function(obj) {
-                const previewPath = obj.path
-                  ? '/' + String(obj.path).replace(/^\\/+|\\/+$/g, '') + '/'
-                  : '#';
+                const previewPath = buildInternalLink(obj.path);
                 return '<a href="' + previewPath + '">' + obj.title + '</a>';
               }
             });
@@ -711,7 +740,7 @@ function renderDecapShell(site, token) {
                         create: true,
                         fields: [
                             {label: "Title", name: "title", widget: "string"},
-                            {label: "Layout", name: "layout", widget: "select", default: "post", options: ["post", "page"]},
+                            {label: "Layout", name: "layout", widget: "select", default: "page", options: ["page", "post"], hint: "Use 'page' for normal website pages so links like /hello-world/ resolve correctly."},
                             {label: "Posted", name: "date", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", default: "{{now}}", required: false},
                             {label: "Updated", name: "last_modified_at", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", required: false},
                             {label: "Table of contents", name: "toc", widget: "boolean", default: true, required: false},
@@ -1171,7 +1200,7 @@ app.get("/configs/:siteId.yml", async (req, res) => {
     return;
   }
 
-  const config = `backend: \n  name: git-gateway\n  api_root: ${API_BASE_URL}/.netlify/git\n  repo: ${site.github_repo}\n  branch: ${site.branch}\nmedia_folder: ${site.media_path}\npublic_folder: ${site.media_path}\ncollections: \n - name: "pages"\n    label: "Pages"\n    folder: "${site.content_path}"\n    create: true\n    fields: \n      - { label: "Title", name: "title", widget: "string" }\n      - { label: "Layout", name: "layout", widget: "select", default: "post", options: ["post", "page"] }\n      - { label: "Posted", name: "date", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", default: "{{now}}", required: false }\n      - { label: "Updated", name: "last_modified_at", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", required: false }\n      - { label: "Table of contents", name: "toc", widget: "boolean", default: true, required: false }\n      - { label: "Body", name: "body", widget: "markdown" }\n`;
+  const config = `backend: \n  name: git-gateway\n  api_root: ${API_BASE_URL}/.netlify/git\n  repo: ${site.github_repo}\n  branch: ${site.branch}\nmedia_folder: ${site.media_path}\npublic_folder: ${site.media_path}\ncollections: \n - name: "pages"\n    label: "Pages"\n    folder: "${site.content_path}"\n    create: true\n    fields: \n      - { label: "Title", name: "title", widget: "string" }\n      - { label: "Layout", name: "layout", widget: "select", default: "page", options: ["page", "post"], hint: "Use 'page' for normal website pages so links like /hello-world/ resolve correctly." }\n      - { label: "Posted", name: "date", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", default: "{{now}}", required: false }\n      - { label: "Updated", name: "last_modified_at", widget: "datetime", format: "YYYY-MM-DD HH:mm:ss Z", date_format: "YYYY-MM-DD", time_format: "HH:mm:ss", required: false }\n      - { label: "Table of contents", name: "toc", widget: "boolean", default: true, required: false }\n      - { label: "Body", name: "body", widget: "markdown" }\n`;
   res.type("text/yaml").send(config);
 });
 
