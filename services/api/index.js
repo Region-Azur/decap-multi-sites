@@ -64,16 +64,30 @@ function enrichChirpyFrontMatter(content, filePath) {
   const frontMatterRaw = frontMatterMatch[1];
   const hasDate = /^date\s*:/m.test(frontMatterRaw);
   const hasUpdated = /^last_modified_at\s*:/m.test(frontMatterRaw);
+  const hasPermalink = /^permalink\s*:/m.test(frontMatterRaw);
+
+  const filename = String(filePath || "")
+    .split("/")
+    .filter(Boolean)
+    .pop() || "";
+  const slug = filename.replace(/\.(md|markdown)$/i, "").trim();
 
   let updatedFrontMatter = frontMatterRaw;
   if (!hasDate) {
-    updatedFrontMatter += `\ndate: ${nowIso}`;
+    updatedFrontMatter += `
+date: ${nowIso}`;
   }
 
   if (hasUpdated) {
     updatedFrontMatter = updatedFrontMatter.replace(/^last_modified_at\s*:.*$/m, `last_modified_at: ${nowIso}`);
   } else {
-    updatedFrontMatter += `\nlast_modified_at: ${nowIso}`;
+    updatedFrontMatter += `
+last_modified_at: ${nowIso}`;
+  }
+
+  if (!hasPermalink && slug) {
+    updatedFrontMatter += `
+permalink: /${slug}/`;
   }
 
   return content.replace(/^---\n([\s\S]*?)\n---\n?/, `---\n${updatedFrontMatter}\n---\n`);
