@@ -20,22 +20,87 @@ const FAVICON_SIZES = {
 };
 
 /**
- * Download image from URL
- * @param {string} url - Image URL
+ * Block SSRF: validate that a URL points to a public internet host.
+ * Throws if the URL is private, loopback, link-local, or uses a non-http(s) protocol.
+ */
+function validatePublicUrl(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error(`Invalid URL: ${rawUrl}`);
+  }
 
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Disallowed protocol "${parsed.protocol}" in favicon URL`);
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block loopback
+  if (hostname === 'localhost' || hostname === '::1') {
+    throw new Error('Favicon URL must not point to localhost');
+  }
+
+  // Block IPv4 private / reserved ranges using a numeric comparison
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const [, a, b, c, d] = ipv4Match.map(Number);
+    if (
+      a === 10 ||                                         // 10.0.0.0/8
+      (a === 172 && b >= 16 && b <= 31) ||                // 172.16.0.0/12
+      (a === 192 && b === 168) ||                         // 192.168.0.0/16
+      (a === 127) ||                                      // 127.0.0.0/8
+      (a === 169 && b === 254) ||                         // 169.254.0.0/16  (link-local / cloud metadata)
+      (a === 0) ||                                        // 0.0.0.0/8
+      (a === 100 && b >= 64 && b <= 127) ||               // 100.64.0.0/10  (shared address space)
+      (a === 192 && b === 0 && c === 2) ||                // 192.0.2.0/24   (TEST-NET)
+      (a === 198 && b >= 18 && b <= 19) ||                // 198.18.0.0/15  (benchmarking)
+      (a === 240)                                         // 240.0.0.0/4    (reserved)
+    ) {
+      throw new Error(`Favicon URL hostname "${hostname}" is in a private/reserved IP range`);
+    }
+  }
+
+  // Block IPv6 private ranges
+  if (
+    hostname.startsWith('[::') ||
+    hostname.startsWith('[fc') ||
+    hostname.startsWith('[fd') ||
+    hostname.startsWith('[fe80')
+  ) {
+    throw new Error(`Favicon URL hostname "${hostname}" is a private IPv6 address`);
+  }
+}
+
+/**
+ * Download image from URL (only after SSRF validation)
+ * @param {string} url - Image URL
  */
 async function downloadImage(url) {
+  validatePublicUrl(url);
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
-    
-    protocol.get(url, (response) => {
+
+    protocol.get(url, { timeout: 10000 }, (response) => {
       if (response.statusCode !== 200) {
         reject(new Error(`Failed to download image: HTTP ${response.statusCode}`));
         return;
       }
 
+      const MAX_SIZE = 10 * 1024 * 1024; // 10 MB limit
+      let totalSize = 0;
       const chunks = [];
-      response.on('data', (chunk) => chunks.push(chunk));
+
+      response.on('data', (chunk) => {
+        totalSize += chunk.length;
+        if (totalSize > MAX_SIZE) {
+          response.destroy();
+          reject(new Error('Image exceeds 10 MB size limit'));
+          return;
+        }
+        chunks.push(chunk);
+      });
       response.on('end', () => resolve(Buffer.concat(chunks)));
       response.on('error', reject);
     }).on('error', reject);
@@ -100,14 +165,15 @@ async function generatePng(sourceBuffer, width, height) {
 }
 
 /**
- * Generate ICO file (multi-resolution)
+ * Generate ICO file (multi-resolution: 16x16 + 32x32)
  * @param {Buffer} sourceBuffer - Source image buffer
  * @returns {Promise<Buffer>} ICO buffer
  */
 async function generateIco(sourceBuffer) {
   const png16 = await generatePng(sourceBuffer, 16, 16);
   const png32 = await generatePng(sourceBuffer, 32, 32);
-  return png32;
+  // pngToIco expects an array of PNG buffers and produces a real .ico file
+  return await pngToIco([png16, png32]);
 }
 
 /**

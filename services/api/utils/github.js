@@ -4,11 +4,8 @@ function normalizePrivateKey(key) {
   }
   let normalized = key.replace(/\\n/g, "\n").trim();
   if (!normalized.includes("-----BEGIN")) {
-    console.log("DEBUG: Key missing headers, adding them...");
     normalized = `-----BEGIN RSA PRIVATE KEY-----\n${normalized}\n-----END RSA PRIVATE KEY-----`;
   }
-  console.log(`DEBUG: Private Key loaded. Length: ${normalized.length}`);
-  console.log(`DEBUG: Key Start: ${normalized.substring(0, 30)}...`);
   return normalized;
 }
 function parseRepo(repoString) {

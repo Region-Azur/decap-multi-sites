@@ -2,13 +2,15 @@ const jwt = require("jsonwebtoken");
 const config = require("../config");
 
 function verifyToken(token) {
+  if (!config.JWT_SECRET) {
+    throw new Error("JWT_SECRET is not configured");
+  }
   try {
-    // Remove "Bearer " prefix if present
     const cleanToken = token.replace(/^Bearer\s+/i, "").trim();
     const decoded = jwt.verify(cleanToken, config.JWT_SECRET, { algorithms: ["HS256"] });
     return decoded;
   } catch (err) {
-    console.error("DEBUG: Token verification failed:", err.message);
+    console.error("Token verification failed:", err.message);
     return null;
   }
 }

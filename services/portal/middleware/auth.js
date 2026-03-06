@@ -3,7 +3,6 @@ const { normalizeEmail, fetchUserInfo, parseJwt } = require("../utils/oidc");
 const config = require("../config");
 
 async function getAuthInfo(req) {
-  console.log("DEBUG: Incoming headers:", JSON.stringify(req.headers, null, 2));
 
   const issuer = req.header("x-auth-request-issuer") || config.DEFAULT_OIDC_ISSUER;
   const sub = req.header("x-auth-request-user") || req.header("x-forwarded-user");
@@ -93,8 +92,6 @@ async function getOrCreateUser(db, auth) {
     return existing;
   }
 
-  const isFirstUser = (await db("users").count("id as count").first()).count === 0;
-  const isAdmin = isFirstUser || config.ADMIN_EMAILS.includes(auth.email);
   const id = crypto.randomUUID();
 
   let initialName = auth.name;
@@ -118,29 +115,35 @@ async function getOrCreateUser(db, auth) {
         }
       }
     } catch (e) {
-      console.warn(`DEBUG: Failed to fetch initial user info (using fallback): ${e.message}`);
+      console.warn(`Failed to fetch initial user info (using fallback): ${e.message}`);
     }
   }
 
-  await db("users").insert({
-    id,
-    oidc_issuer: auth.issuer,
-    oidc_sub: auth.sub,
-    email: auth.email,
-    name: initialName,
-    is_admin: isAdmin,
-    last_synced_at: lastSyncedAt
+  const finalName = initialName;
+  const finalSyncedAt = lastSyncedAt;
+
+  await db.transaction(async (trx) => {
+    const alreadyExists = await trx("users")
+      .where({ oidc_issuer: auth.issuer, oidc_sub: auth.sub })
+      .first();
+    if (alreadyExists) return;
+
+    const isFirstUser = (await trx("users").count("id as count").first()).count === 0;
+    const isAdmin = isFirstUser || config.ADMIN_EMAILS.includes(auth.email);
+
+    await trx("users").insert({
+      id,
+      oidc_issuer: auth.issuer,
+      oidc_sub: auth.sub,
+      email: auth.email,
+      name: finalName,
+      is_admin: isAdmin,
+      last_synced_at: finalSyncedAt,
+    });
   });
 
-  return {
-    id,
-    oidc_issuer: auth.issuer,
-    oidc_sub: auth.sub,
-    email: auth.email,
-    name: initialName,
-    is_admin: isAdmin,
-    last_synced_at: lastSyncedAt
-  };
+  // Re-fetch the final record (handles won/lost race transparently)
+  return db("users").where({ oidc_issuer: auth.issuer, oidc_sub: auth.sub }).first();
 }
 
 module.exports = {

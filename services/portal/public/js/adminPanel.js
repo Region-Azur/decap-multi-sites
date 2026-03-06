@@ -60,23 +60,27 @@ async function deleteSite(siteId, siteName) {
 }
 
 async function resetRepository(siteId, siteName) {
-  // First confirmation
   if (!confirm('Are you sure you want to reset the repository "' + siteName + '"? This will reinitialize the repository with fresh template files and overwrite all configuration files (but preserve the content folder if it exists as a backup).')) {
     return;
   }
 
-  // Second confirmation
   if (!confirm('This is a destructive action. Click OK again to confirm you want to reset "' + siteName + '".')) {
     return;
   }
 
   try {
+    // Obtain a short-lived signed confirmation token from the server
+    const tokenRes = await fetch('/api/admin/sites/' + siteId + '/reset-token');
+    if (!tokenRes.ok) {
+      alert('Could not obtain reset token: ' + (await tokenRes.text()));
+      return;
+    }
+    const { confirmationToken } = await tokenRes.json();
+
     const res = await fetch('/api/admin/sites/' + siteId + '/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        confirmationToken: 'reset-' + siteId + '-confirmed'
-      })
+      body: JSON.stringify({ confirmationToken })
     });
     if (res.ok) {
       alert('Repository reset started! GitHub Actions will rebuild the site shortly.');

@@ -4,6 +4,6 @@ module.exports = {
   GITHUB_APP_ID: process.env.GITHUB_APP_ID,
   GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY,
   GITHUB_APP_INSTALLATION_ID: process.env.GITHUB_APP_INSTALLATION_ID,
-  JWT_SECRET: process.env.JWT_SECRET || "your-secret-key-change-in-production",
+  JWT_SECRET: process.env.JWT_SECRET, // Required — no fallback; startup will throw if missing
 };
 

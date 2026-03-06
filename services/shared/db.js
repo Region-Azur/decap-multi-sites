@@ -9,10 +9,8 @@ function parseDatabaseUrl(databaseUrl) {
     const url = new URL(databaseUrl);
     const filename = decodeURIComponent(url.pathname || "/data/cms.sqlite");
     return {
-      client: "sqlite3",
-      connection: {
-        filename,
-      },
+      client: "better-sqlite3",
+      connection: { filename },
       useNullAsDefault: true,
     };
   }
@@ -134,16 +132,23 @@ async function ensureSchema(db) {
   const hasApiTokens = await db.schema.hasTable("api_tokens");
   if (!hasApiTokens) {
     await db.schema.createTable("api_tokens", (table) => {
-      table.string("token").primary();
+      table.string("token").primary();           // stores SHA-256 hash of the raw token
       table.string("user_id").notNullable();
-      table.string("site_id").nullable(); // Links token to a specific site context
+      table.string("site_id").nullable();
       table.string("created_at").notNullable();
+      table.string("expires_at").nullable();     // ISO-8601; null = never expires (legacy)
     });
   } else {
     const hasSiteId = await db.schema.hasColumn("api_tokens", "site_id");
     if (!hasSiteId) {
       await db.schema.table("api_tokens", (table) => {
         table.string("site_id").nullable();
+      });
+    }
+    const hasExpiresAt = await db.schema.hasColumn("api_tokens", "expires_at");
+    if (!hasExpiresAt) {
+      await db.schema.table("api_tokens", (table) => {
+        table.string("expires_at").nullable();
       });
     }
   }

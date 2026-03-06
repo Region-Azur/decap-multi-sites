@@ -1,11 +1,12 @@
 const config = require("../config");
 const { getFaviconHTML } = require("../../shared/favicon");
+const { escapeHtml } = require("../utils/escape");
 
 function renderSitePicker(user, sites, isAdmin = false) {
   const listItems = sites
     .map((site) => {
-      const settingsButton = `<button class="gear" type="button" data-site-id="${site.id}" data-display-name="${site.display_name}" data-page-title="${site.page_title || ''}" data-suptitle="${site.suptitle || 'Built with Decap CMS'}" data-brand-icon="${site.brand_icon || ''}" data-favicon="${site.favicon || ''}" title="Site settings">⚙️</button>`;
-      return `<li class="site-card"><a class="site-link" href="/sites/${site.id}">${site.display_name}</a>${settingsButton}</li>`;
+      const settingsButton = `<button class="gear" type="button" data-site-id="${escapeHtml(site.id)}" data-display-name="${escapeHtml(site.display_name)}" data-page-title="${escapeHtml(site.page_title || '')}" data-suptitle="${escapeHtml(site.suptitle || 'Built with Decap CMS')}" data-brand-icon="${escapeHtml(site.brand_icon || '')}" data-favicon="${escapeHtml(site.favicon || '')}" title="Site settings">⚙️</button>`;
+      return `<li class="site-card"><a class="site-link" href="/sites/${escapeHtml(site.id)}">${escapeHtml(site.display_name)}</a>${settingsButton}</li>`;
     })
     .join("");
 
@@ -22,7 +23,7 @@ function renderSitePicker(user, sites, isAdmin = false) {
   <body>
     <div class="wrap">
       <div class="top">
-        <h1>Welcome, ${user.name}</h1>
+        <h1>Welcome, ${escapeHtml(user.name)}</h1>
         <div class="top-actions">
           ${isAdmin ? '<a class="admin-link" href="/admin">Admin Panel</a>' : ''}
           <a id="logoutBtn" class="logout-link" href="/oauth2/sign_out">Logout</a>

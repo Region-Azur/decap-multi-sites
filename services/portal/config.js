@@ -9,4 +9,5 @@ module.exports = {
   API_BASE_URL: process.env.API_BASE_URL || process.env.PORTAL_BASE_URL || "",
   USERINFO_URL_OVERRIDE:
     process.env.OIDC_USERINFO_URL || process.env.HITOBITO_USERINFO_URL || "",
+  JWT_SECRET: process.env.JWT_SECRET, // Required — shared with the API service
 };

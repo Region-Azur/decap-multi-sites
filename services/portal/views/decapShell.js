@@ -1,7 +1,8 @@
 const config = require("../config");
 const { getFaviconHTML } = require("../../shared/favicon");
+const { escapeJs } = require("../utils/escape");
 
-function renderDecapShell(site, token) {
+function renderDecapShell(site, token, nonce = "") {
   const siteId = site.id;
   const repoParts = (site.github_repo || "").split("/");
   const repoOwner = repoParts[0] || "";
@@ -25,7 +26,7 @@ function renderDecapShell(site, token) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Decap CMS - ${siteId}</title>
     ${getFaviconHTML()}
-    <script>window.CMS_MANUAL_INIT = true;</script>
+    <script nonce="${nonce}">window.CMS_MANUAL_INIT = true;</script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <style>
       #loginOverlay {
@@ -89,13 +90,13 @@ function renderDecapShell(site, token) {
         text-align: center;
       }
     </style>
-    <script>
+    <script nonce="${nonce}">
       window.mockUser = {
-        url: "${config.API_BASE_URL}",
+        url: "${escapeJs(config.API_BASE_URL)}",
         backend: { name: "git-gateway" },
         api: { request: (path) => { console.log("Mock API Request:", path); return Promise.resolve(); } },
         token: {
-          access_token: "${token}",
+          access_token: "${escapeJs(token)}",
           refresh_token: "dummy-refresh-token",
           token_type: "Bearer",
           expires_in: 3600,
@@ -105,7 +106,7 @@ function renderDecapShell(site, token) {
         email: "auto-login@example.com",
         user_metadata: { full_name: "Auto User" },
         app_metadata: { provider: "email" },
-        jwt: (force) => Promise.resolve("${token}"),
+        jwt: (force) => Promise.resolve("${escapeJs(token)}"),
         logout: () => Promise.resolve()
       };
 
@@ -138,7 +139,7 @@ function renderDecapShell(site, token) {
           }
           document.body.classList.remove("login-blocked");
         },
-        refresh: () => Promise.resolve("${token}")
+        refresh: () => Promise.resolve("${escapeJs(token)}")
       };
     </script>
   </head>
@@ -146,8 +147,8 @@ function renderDecapShell(site, token) {
     <div id="loginOverlay" aria-live="polite" aria-busy="true">
       <div class="login-spinner" role="status" aria-label="Logging in"></div>
     </div>
-    <script src="https://unpkg.com/decap-cms@3.10.0/dist/decap-cms.js"></script>
-    <script>
+    <script nonce="${nonce}" src="https://unpkg.com/decap-cms@3.10.0/dist/decap-cms.js"></script>
+    <script nonce="${nonce}">
       document.addEventListener("DOMContentLoaded", async function() {
         const loginOverlay = document.getElementById("loginOverlay");
         const freeSidebarIconOptions = [
@@ -484,25 +485,25 @@ function renderDecapShell(site, token) {
           const config = {
             backend: {
               name: 'git-gateway',
-              api_root: '${config.API_BASE_URL}/.netlify/git',
-              gateway_url: '${config.API_BASE_URL}/.netlify/git',
-              repo: '${site.github_repo}',
-              branch: '${site.branch}',
+              api_root: '${escapeJs(config.API_BASE_URL)}/.netlify/git',
+              gateway_url: '${escapeJs(config.API_BASE_URL)}/.netlify/git',
+              repo: '${escapeJs(site.github_repo)}',
+              branch: '${escapeJs(site.branch)}',
               squash_merges: true
             },
-            site_url: '${publicSiteUrl || config.API_BASE_URL}',
-            display_url: '${publicSiteUrl || config.API_BASE_URL}',
+            site_url: '${escapeJs(publicSiteUrl || config.API_BASE_URL)}',
+            display_url: '${escapeJs(publicSiteUrl || config.API_BASE_URL)}',
             logo_url: 'https://decapcms.org/img/decap-logo.svg',
             locale: 'en',
             editor: {
               preview: false
             },
-            media_folder: '${site.media_path}',
-            public_folder: '${site.media_path}',
+            media_folder: '${escapeJs(site.media_path)}',
+            public_folder: '${escapeJs(site.media_path)}',
             collections: [{
               name: "pages",
               label: "Pages",
-              folder: "${site.content_path}",
+              folder: "${escapeJs(site.content_path)}",
               create: true,
               fields: [
                 { label: "Title", name: "title", widget: "string" },
@@ -531,7 +532,7 @@ function renderDecapShell(site, token) {
             try {
               console.log("Fetching /api/user...");
               const res = await fetch('/api/user', {
-                headers: { 'Authorization': 'Bearer ${token}' }
+                headers: { 'Authorization': 'Bearer ${escapeJs(token)}' }
               });
               console.log("Fetch /api/user status: " + res.status);
 

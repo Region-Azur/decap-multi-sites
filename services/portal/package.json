@@ -7,9 +7,12 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
+    "express": "^4.22.1",
+    "express-rate-limit": "^8.0.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
     "knex": "^3.1.0",
     "mysql2": "^3.11.0",
-    "sqlite3": "^5.1.7"
+    "better-sqlite3": "^11.0.0"
   }
 }

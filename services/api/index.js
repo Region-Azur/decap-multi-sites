@@ -1,5 +1,8 @@
 const crypto = require("crypto");
 const express = require("express");
+const jwt = require("jsonwebtoken");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const { createAppAuth } = require("@octokit/auth-app");
 const { Octokit } = require("@octokit/rest");
 const { createDb, ensureSchema } = require("./shared/db");
@@ -8,6 +11,7 @@ const { generateAllFavicons } = require("./utils/favicon-generator");
 
 const PORT = Number(process.env.API_PORT || 4000);
 const DATABASE_URL = process.env.DATABASE_URL;
+const JWT_SECRET = process.env.JWT_SECRET; // Required — validated at startup
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
   .split(",")
   .map((entry) => entry.trim().toLowerCase())
@@ -24,10 +28,52 @@ const API_BODY_LIMIT = process.env.API_BODY_LIMIT || "2mb";
 const app = express();
 const db = createDb(DATABASE_URL);
 
+// Trust the first proxy (oauth2-proxy / nginx) so rate-limiters and
+// IP-based logic read the real client IP from X-Forwarded-For.
+app.set("trust proxy", 1);
+
+// Security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "same-site" },
+  contentSecurityPolicy: false, // CSP is set per-page in the portal; API returns JSON only
+}));
+
+// General rate limiter — 300 requests per minute per IP
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later." },
+});
+app.use(generalLimiter);
+
+// Stricter limiter for admin write operations — 30 per minute per IP
+const adminWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many admin requests, please slow down." },
+});
+
 const DECAP_COMMITTER = {
-  name: "Decap",
-  email: "decap@users.noreply.github.com",
+  name: "Decap CMS",
+  // email intentionally left unset here — it is filled in per-commit below
 };
+
+// Anonymous author used for all commits proxied through the CMS.
+// We preserve the original `date` so the commit timeline stays accurate.
+// We do NOT override committer — when omitted, GitHub uses the GitHub App's
+// own bot identity, which is the authenticated pusher and is what makes the
+// push event trustworthy enough to trigger GitHub Actions workflows.
+function buildAnonymousAuthor(originalAuthor) {
+  return {
+    name: DECAP_COMMITTER.name,
+    email: "decap@users.noreply.github.com",
+    date: (originalAuthor && originalAuthor.date) || new Date().toISOString(),
+  };
+}
 
 function getAnonymizedDecapCommitMessage(originalMessage, filePath = "", method = "") {
   const cleanedOriginal = typeof originalMessage === "string"
@@ -130,9 +176,30 @@ permalink: /${slug}/`;
 
 app.use(express.json({ limit: API_BODY_LIMIT }));
 
-// Debug middleware to check incoming paths (fix 404 issues)
+// CSRF protection: for state-changing requests that do NOT use a Bearer token,
+// ensure the Origin or Referer header matches the server's own host.
+// Bearer-token requests (Decap CMS, API clients) are exempt because custom headers
+// cannot be set by cross-origin forms/scripts without CORS pre-flight.
 app.use((req, res, next) => {
-  console.log(`DEBUG: Incoming Request ${req.method} ${req.url}`);
+  const safeMethods = ["GET", "HEAD", "OPTIONS"];
+  if (safeMethods.includes(req.method)) return next();
+
+  // Bearer-token requests are inherently CSRF-safe
+  const auth = req.headers.authorization || "";
+  if (auth.toLowerCase().startsWith("bearer ")) return next();
+
+  const origin = req.headers.origin || "";
+  const referer = req.headers.referer || "";
+  const host = req.headers.host || "";
+
+  const allowed = origin
+    ? (origin.includes(host))
+    : (referer.includes(host));
+
+  if (!allowed) {
+    console.warn(`CSRF: rejected ${req.method} ${req.url} origin="${origin}" referer="${referer}"`);
+    return res.status(403).json({ error: "Forbidden: CSRF check failed" });
+  }
   next();
 });
 
@@ -146,73 +213,56 @@ function normalizeEmail(value) {
 }
 
 async function getAuthInfo(req) {
-  // Log all headers for debugging purposes
-  console.log("DEBUG: Incoming headers:", JSON.stringify(req.headers, null, 2));
-
   // Check for Bearer token FIRST (for Decap CMS and headless access)
-  // This must come BEFORE oauth2-proxy headers so JWT tokens with siteId are used
   const authHeader = req.header("authorization");
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.substring(7);
-    console.log(`DEBUG: Processing Bearer token (first 20 chars): ${token.substring(0, 20)}...`);
 
-    // Try api_tokens table first
-    const apiToken = await db("api_tokens").where({ token }).first();
+    // Look up api_tokens by SHA-256 hash of the token (tokens are stored hashed)
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const apiToken = await db("api_tokens").where({ token: tokenHash }).first();
     if (apiToken) {
-      const user = await db("users").where({ id: apiToken.user_id }).first();
-      if (user) {
-        console.log(`DEBUG: Authenticated via API token for ${user.email}`);
-        return {
-          issuer: user.oidc_issuer,
-          sub: user.oidc_sub,
-          email: user.email,
-          name: user.name,
-          siteId: apiToken.site_id, // Pass site context
-          isApiToken: true
-        };
+      // Reject expired tokens (expires_at is null for legacy tokens — treat as valid)
+      if (apiToken.expires_at && new Date(apiToken.expires_at) < new Date()) {
+        console.log("INFO: Rejected expired API token");
+      } else {
+        const user = await db("users").where({ id: apiToken.user_id }).first();
+        if (user) {
+          console.log(`INFO: Authenticated via API token for user id=${user.id}`);
+          return {
+            issuer: user.oidc_issuer,
+            sub: user.oidc_sub,
+            email: user.email,
+            name: user.name,
+            siteId: apiToken.site_id,
+            isApiToken: true
+          };
+        }
       }
     }
 
-    // Try decoding JWT from portal (format: header.payload.signature)
-    try {
-      const parts = token.split(".");
-      console.log(`DEBUG: Token has ${parts.length} parts (expected 3)`);
-
-      if (parts.length === 3) {
-        // Decode the payload (second part)
-        try {
-          const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
-          console.log(`DEBUG: Decoded JWT payload:`, payload);
-
-          if (payload.email) {
-            // Look up user by email to get their basic info
-            const jwtUser = await db("users").where({ email: payload.email }).first();
-            console.log(`DEBUG: JWT user lookup for ${payload.email}: ${jwtUser ? "found" : "NOT FOUND"}`);
-
-            if (jwtUser) {
-              // Use siteId from JWT payload if available (set by portal)
-              const siteId = payload.siteId || null;
-              console.log(`DEBUG: Authenticated via JWT token for ${payload.email}, siteId=${siteId}`);
-              return {
-                issuer: jwtUser.oidc_issuer,
-                sub: jwtUser.oidc_sub,
-                email: jwtUser.email,
-                name: jwtUser.name,
-                siteId: siteId, // Use siteId from JWT payload
-                isJwt: true
-              };
-            }
-          } else {
-            console.log(`DEBUG: JWT payload has no email field`);
+    // Verify the JWT signature — reject any token with an invalid or missing signature
+    if (JWT_SECRET) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] });
+        if (decoded && decoded.email) {
+          const jwtUser = await db("users").where({ email: decoded.email }).first();
+          if (jwtUser) {
+            const siteId = decoded.siteId || null;
+            console.log(`INFO: Authenticated via verified JWT for user id=${jwtUser.id}, siteId=${siteId}`);
+            return {
+              issuer: jwtUser.oidc_issuer,
+              sub: jwtUser.oidc_sub,
+              email: jwtUser.email,
+              name: jwtUser.name,
+              siteId: siteId,
+              isJwt: true
+            };
           }
-        } catch (parseErr) {
-          console.log(`DEBUG: Failed to parse JWT payload: ${parseErr.message}`);
         }
-      } else {
-        console.log(`DEBUG: Token does not have 3 parts, skipping JWT decode`);
+      } catch (jwtErr) {
+        console.log(`INFO: JWT verification failed: ${jwtErr.message}`);
       }
-    } catch (jwtErr) {
-      console.log(`DEBUG: Error processing JWT: ${jwtErr.message}`);
     }
   }
 
@@ -256,20 +306,30 @@ async function getOrCreateUser(auth) {
     return existing;
   }
 
-  const isFirstUser = (await db("users").count("id as count").first()).count === 0;
-  const isAdmin = isFirstUser || ADMIN_EMAILS.includes(auth.email);
   const id = crypto.randomUUID();
 
-  await db("users").insert({
-    id,
-    oidc_issuer: auth.issuer,
-    oidc_sub: auth.sub,
-    email: auth.email,
-    name: auth.name,
-    is_admin: isAdmin,
+  await db.transaction(async (trx) => {
+    // Re-check inside the transaction to avoid the race between count and insert
+    const alreadyExists = await trx("users")
+      .where({ oidc_issuer: auth.issuer, oidc_sub: auth.sub })
+      .first();
+    if (alreadyExists) return; // lost the race — another request already created this user
+
+    const isFirstUser = (await trx("users").count("id as count").first()).count === 0;
+    const isAdmin = isFirstUser || ADMIN_EMAILS.includes(auth.email);
+
+    await trx("users").insert({
+      id,
+      oidc_issuer: auth.issuer,
+      oidc_sub: auth.sub,
+      email: auth.email,
+      name: auth.name,
+      is_admin: isAdmin,
+    });
   });
 
-  return db("users").where({ id }).first();
+  // Re-fetch (handles both the created-now and already-existed-inside-tx cases)
+  return db("users").where({ oidc_issuer: auth.issuer, oidc_sub: auth.sub }).first();
 }
 
 function normalizePrivateKey(rawKey) {
@@ -283,12 +343,9 @@ function normalizePrivateKey(rawKey) {
   let normalized = decoded.replace(/\\n/g, "\n");
 
   if (!normalized.includes("-----BEGIN")) {
-    console.log("DEBUG: Key missing headers, adding them...");
     normalized = `-----BEGIN RSA PRIVATE KEY-----\n${normalized}\n-----END RSA PRIVATE KEY-----`;
   }
 
-  console.log(`DEBUG: Private Key loaded. Length: ${normalized.length}`);
-  console.log(`DEBUG: Key Start: ${normalized.substring(0, 30)}...`);
   return normalized;
 }
 
@@ -653,7 +710,7 @@ router.get("/admin/sites", async (req, res) => {
 });
 
 
-router.post("/admin/sites", async (req, res) => {
+router.post("/admin/sites", adminWriteLimiter, async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
     return;
@@ -680,10 +737,30 @@ router.post("/admin/sites", async (req, res) => {
     return;
   }
 
+  // Validate and normalise github_repo format (must be "owner/repo", no extra slashes or spaces)
+  const repoParts = github_repo.trim().split("/");
+  if (repoParts.length !== 2) {
+    res.status(400).json({ error: "github_repo must be in format owner/repo" });
+    return;
+  }
+  const repoOwnerPart = repoParts[0].trim();
+  const repoNamePart  = repoParts[1].trim();
+  if (!repoOwnerPart || !repoNamePart) {
+    res.status(400).json({ error: "github_repo owner and repo cannot be empty" });
+    return;
+  }
+  // Only allow safe GitHub name characters
+  const safeRepoPattern = /^[a-zA-Z0-9_.\-]+$/;
+  if (!safeRepoPattern.test(repoOwnerPart) || !safeRepoPattern.test(repoNamePart)) {
+    res.status(400).json({ error: "github_repo contains invalid characters" });
+    return;
+  }
+  const finalGithubRepo = `${repoOwnerPart}/${repoNamePart}`;
+
   await db("sites").insert({
     id,
     display_name,
-    github_repo,
+    github_repo: finalGithubRepo,
     branch,
     content_path,
     media_path,
@@ -698,25 +775,17 @@ router.post("/admin/sites", async (req, res) => {
   // --- Auto-Configuration (Templates & Pages) ---
   try {
     const octokit = await getOctokit();
-    const { owner, repo } = parseRepo(github_repo);
+    const { owner, repo } = parseRepo(finalGithubRepo);
     const templateUrls = getTemplateFiles(theme, display_name, {
       pageTitle: page_title || display_name,
       suptitle: suptitle || 'Built with Decap CMS',
       avatarIcon: brand_icon || '',
       favicon: favicon || '',
       domain: domain || '',
-      githubRepo: github_repo || '',
+      githubRepo: finalGithubRepo,
     });
 
-    // 1. Commit Template Files
-    // We need to fetch current tree or just update files individually?
-    // createOrUpdateFileContents is easiest for individual files
-    // For multiple, traversing is better, but let's do sequential for simplicity (it's only ~3-4 files)
-
-    console.log(`DEBUG: Applying theme '${theme}' to ${github_repo}...`);
-
-    // 1. Commit Template Files (Atomic Commit)
-    console.log(`DEBUG: Applying theme '${theme}' to ${github_repo}...`);
+    console.log(`INFO: Applying theme '${theme}' to ${finalGithubRepo}...`);
     await commitMultipleFiles(octokit, owner, repo, branch, templateUrls, `Initialize theme: ${theme}`);
 
 
@@ -765,7 +834,7 @@ router.post("/admin/sites", async (req, res) => {
   res.status(201).json({ id });
 });
 
-router.post("/admin/sites/:siteId/template", async (req, res) => {
+router.post("/admin/sites/:siteId/template", adminWriteLimiter, async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
 
@@ -825,7 +894,7 @@ router.post("/admin/sites/:siteId/template", async (req, res) => {
   }
 });
 
-router.put("/admin/sites/:siteId", async (req, res) => {
+router.put("/admin/sites/:siteId", adminWriteLimiter, async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
 
@@ -936,7 +1005,7 @@ router.put("/admin/sites/:siteId", async (req, res) => {
   res.json({ success: true });
 });
 
-router.delete("/admin/sites/:siteId", async (req, res) => {
+router.delete("/admin/sites/:siteId", adminWriteLimiter, async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
 
@@ -958,18 +1027,45 @@ router.delete("/admin/sites/:siteId", async (req, res) => {
   res.status(204).send();
 });
 
+// GET /admin/sites/:siteId/reset-token
+// Issues a short-lived signed token that must be passed back to the reset endpoint.
+router.get("/admin/sites/:siteId/reset-token", async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+
+  const { siteId } = req.params;
+  const site = await db("sites").where({ id: siteId }).first();
+  if (!site) {
+    res.status(404).json({ error: "Site not found" });
+    return;
+  }
+
+  // Token = HMAC(secret, siteId + 5-minute window) — valid for up to 5 minutes
+  const window = Math.floor(Date.now() / (5 * 60 * 1000));
+  const token = crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(`reset:${siteId}:${window}`)
+    .digest("hex");
+
+  res.json({ confirmationToken: token });
+});
+
 // POST /admin/sites/:siteId/reset
-// Requires double confirmation token from client
-router.post("/admin/sites/:siteId/reset", async (req, res) => {
+// Requires a valid HMAC confirmation token obtained from /reset-token
+router.post("/admin/sites/:siteId/reset", adminWriteLimiter, async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
 
   const { siteId } = req.params;
   const { confirmationToken } = req.body;
 
-  // Verify double confirmation token
-  if (confirmationToken !== `reset-${siteId}-confirmed`) {
-    res.status(400).json({ error: "Invalid confirmation token. Please confirm twice." });
+  // Validate the HMAC token (accept current window and the previous one for clock skew)
+  const now = Math.floor(Date.now() / (5 * 60 * 1000));
+  const validTokens = [now, now - 1].map((w) =>
+    crypto.createHmac("sha256", JWT_SECRET).update(`reset:${siteId}:${w}`).digest("hex")
+  );
+  if (!confirmationToken || !validTokens.includes(confirmationToken)) {
+    res.status(400).json({ error: "Invalid or expired confirmation token. Request a new one." });
     return;
   }
 
@@ -1040,7 +1136,7 @@ router.post("/admin/sites/:siteId/reset", async (req, res) => {
   }
 });
 
-router.post("/admin/permissions", async (req, res) => {
+router.post("/admin/permissions", adminWriteLimiter, async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
     return;
@@ -1115,7 +1211,7 @@ router.get("/user", async (req, res) => {
   });
 });
 
-router.delete("/admin/permissions", async (req, res) => {
+router.delete("/admin/permissions", adminWriteLimiter, async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) {
     return;
@@ -1153,17 +1249,21 @@ router.get("/sites/:siteId/contents", async (req, res) => {
   }
 
   const path = req.query.path || "";
-  const octokit = await getOctokit();
-  const { owner, repo } = parseRepo(site.github_repo);
-
-  const response = await octokit.repos.getContent({
-    owner,
-    repo,
-    path,
-    ref: site.branch,
-  });
-
-  res.json(response.data);
+  try {
+    const octokit = await getOctokit();
+    const { owner, repo } = parseRepo(site.github_repo);
+    const response = await octokit.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref: site.branch,
+    });
+    res.json(response.data);
+  } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: "Not found" });
+    console.error("GET /contents error:", err.message);
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 router.put("/sites/:siteId/contents", async (req, res) => {
@@ -1198,16 +1298,22 @@ router.put("/sites/:siteId/contents", async (req, res) => {
     message: getAnonymizedDecapCommitMessage(message, path, "PUT"),
     content: Buffer.from(preparedContent).toString("base64"),
     branch: site.branch,
-    committer: DECAP_COMMITTER,
-    author: DECAP_COMMITTER,
+    // author: anonymous but preserves the timestamp; committer omitted so GitHub
+    // uses the GitHub App bot identity — this is required to trigger Actions workflows.
+    author: buildAnonymousAuthor(null),
   };
 
   if (sha) {
     payload.sha = sha;
   }
 
-  const response = await octokit.repos.createOrUpdateFileContents(payload);
-  res.json(response.data);
+  try {
+    const response = await octokit.repos.createOrUpdateFileContents(payload);
+    res.json(response.data);
+  } catch (err) {
+    console.error("PUT /contents error:", err.message);
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 router.delete("/sites/:siteId/contents", async (req, res) => {
@@ -1228,20 +1334,24 @@ router.delete("/sites/:siteId/contents", async (req, res) => {
     return;
   }
 
-  const octokit = await getOctokit();
-  const { owner, repo } = parseRepo(site.github_repo);
-  const response = await octokit.repos.deleteFile({
-    owner,
-    repo,
-    path,
-    message: getAnonymizedDecapCommitMessage(message, path, "DELETE"),
-    sha,
-    branch: site.branch,
-    committer: DECAP_COMMITTER,
-    author: DECAP_COMMITTER,
-  });
-
-  res.json(response.data);
+  try {
+    const octokit = await getOctokit();
+    const { owner, repo } = parseRepo(site.github_repo);
+    const response = await octokit.repos.deleteFile({
+      owner,
+      repo,
+      path,
+      message: getAnonymizedDecapCommitMessage(message, path, "DELETE"),
+      sha,
+      branch: site.branch,
+      author: buildAnonymousAuthor(null),
+      // committer omitted — GitHub App bot identity triggers Actions
+    });
+    res.json(response.data);
+  } catch (err) {
+    console.error("DELETE /contents error:", err.message);
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 // List files in a folder (recursive flattening)
@@ -1297,7 +1407,6 @@ router.get("/sites/:siteId/files", listFiles);
 // Proxies requests from /.netlify/git/github/* to https://api.github.com/*
 router.all("/github/*", async (req, res) => {
   const user = await requireUser(req, res);
-  console.log(`DEBUG: Authenticated user object: ${JSON.stringify(user)}`);
   if (!user) return; // requireUser handles 401
 
   const path = req.params[0]; // Capture the * part
@@ -1318,11 +1427,10 @@ router.all("/github/*", async (req, res) => {
 
   if (proxiedBody && typeof proxiedBody === "object" && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
     if (Object.prototype.hasOwnProperty.call(proxiedBody, "author")) {
-      proxiedBody.author = DECAP_COMMITTER;
+      proxiedBody.author = buildAnonymousAuthor(proxiedBody.author);
     }
-    if (Object.prototype.hasOwnProperty.call(proxiedBody, "committer")) {
-      proxiedBody.committer = DECAP_COMMITTER;
-    }
+    // Do NOT override committer — omitting it tells GitHub to use the
+    // GitHub App's own bot identity, which is what triggers Actions workflows.
   }
   let finalPath = path;
 
@@ -1598,6 +1706,9 @@ app.use("/api", router);
 app.use("/.netlify/git", router);
 
 (async () => {
+  if (!JWT_SECRET) {
+    throw new Error("JWT_SECRET environment variable must be set");
+  }
   await ensureSchema(db);
   app.listen(PORT, () => {
     // eslint-disable-next-line no-console
