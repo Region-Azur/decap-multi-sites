@@ -18,11 +18,15 @@ COPY services/api/package.json services/api/package-lock.json* ./
 RUN npm install --omit=dev --include=optional
 
 # Copy application files
+COPY services/api/server.js ./server.js
 COPY services/api/index.js ./index.js
 COPY services/api/templates.js ./templates.js
 COPY services/api/config.js ./config.js
+COPY services/api/db.js ./db.js
 
 # Copy modular directories
+COPY services/api/lib ./lib
+COPY services/api/routes ./routes
 COPY services/api/middleware ./middleware
 COPY services/api/services ./services
 COPY services/api/utils ./utils
@@ -33,4 +37,4 @@ COPY services/shared ./shared
 ENV NODE_ENV=production
 EXPOSE 4000
 
-CMD ["node", "index.js"]
+CMD ["node", "server.js"]

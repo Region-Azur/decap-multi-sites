@@ -112,7 +112,7 @@ function enrichChirpyFrontMatter(content, filePath) {
       .filter(Boolean)
       .pop() || "";
     const slug = filename.replace(/\.(md|markdown)$/i, "").trim();
-    
+
     const minimalFrontMatter = `---
 layout: page
 toc: true
@@ -140,13 +140,13 @@ ${content}`;
   const slug = filename.replace(/\.(md|markdown)$/i, "").trim();
 
   let updatedFrontMatter = frontMatterRaw;
-  
+
   // Always ensure layout is set for content pages
   if (!hasLayout) {
     updatedFrontMatter += `
 layout: page`;
   }
-  
+
   // Always ensure TOC is enabled by default if not specified
   if (!hasToc) {
     updatedFrontMatter += `
@@ -863,7 +863,7 @@ router.post("/admin/sites/:siteId/template", adminWriteLimiter, async (req, res)
 
     // Update Pages settings
     const buildType = 'workflow';
-    // Note: Updating existing pages sites via API can be tricky if they exist. 
+    // Note: Updating existing pages sites via API can be tricky if they exist.
     // We catch errors.
     try {
       // First check if pages exists
@@ -1437,7 +1437,7 @@ router.all("/github/*", async (req, res) => {
   // Context-aware proxying for generic requests (e.g., /branches/main)
   // Try to determine which site/repo this request is for
   let targetSite = null;
-  
+
   if (user.siteId) {
     // Primary: Use siteId from JWT token (best case)
     console.log(`DEBUG: Using siteId from JWT: ${user.siteId}`);
@@ -1446,7 +1446,7 @@ router.all("/github/*", async (req, res) => {
     // Secondary: Try to find the site by checking user's permitted sites
     // This handles the case where JWT doesn't have siteId but user is still authenticated
     console.log(`DEBUG: No siteId in JWT, attempting to find permitted site for user (admin=${user.is_admin})...`);
-    
+
     let permittedSites;
     if (user.is_admin) {
       // For admins, allow access to all enabled sites
@@ -1464,7 +1464,7 @@ router.all("/github/*", async (req, res) => {
         })
         .select("sites.*");
     }
-    
+
     if (permittedSites && permittedSites.length > 0) {
       // Use the first permitted site as default (in the future, could use a header to specify)
       targetSite = permittedSites[0];
