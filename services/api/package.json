@@ -1,0 +1,21 @@
+{
+  "name": "decap-api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test:favicon": "node utils/run-favicon-generator.js"
+  },
+  "dependencies": {
+    "@octokit/auth-app": "^7.0.2",
+    "@octokit/rest": "^21.0.1",
+    "express": "^4.19.2",
+    "knex": "^3.1.0",
+    "js-yaml": "^4.1.0",
+    "mysql2": "^3.11.0",
+    "sharp": "^0.33.0",
+    "png-to-ico": "^2.1.1",
+    "sqlite3": "^5.1.7"
+  }
+}

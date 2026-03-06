@@ -1,0 +1,94 @@
+services:
+  proxy:
+    image: jc21/nginx-proxy-manager:latest
+    ports:
+      - "${PROXY_HTTP_PORT:-80}:80"
+      - "${PROXY_HTTPS_PORT:-443}:443"
+      - "${PROXY_ADMIN_PORT:-81}:81"
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    restart: unless-stopped
+    networks:
+      - edge
+
+  oauth2_proxy:
+    build:
+      context: ./oauth2-proxy-templates
+      dockerfile: Dockerfile
+    volumes:
+      - ./oauth2-proxy-templates:/templates:ro
+    environment:
+      - OAUTH2_PROXY_PROVIDER=oidc
+      - OAUTH2_PROXY_OIDC_ISSUER_URL=${HITOBITO_OIDC_ISSUER}
+      - OAUTH2_PROXY_CLIENT_ID=${HITOBITO_OIDC_CLIENT_ID}
+      - OAUTH2_PROXY_CLIENT_SECRET=${HITOBITO_OIDC_CLIENT_SECRET}
+      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET}
+      - OAUTH2_PROXY_EMAIL_DOMAINS=*
+      - OAUTH2_PROXY_SCOPE=${OAUTH2_PROXY_SCOPE:-openid email name}
+      - OAUTH2_PROXY_REDIRECT_URL=${OAUTH2_PROXY_REDIRECT_URL}
+      - OAUTH2_PROXY_UPSTREAMS=http://api:4000/api/,http://portal:3000/
+      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+      - OAUTH2_PROXY_SET_XAUTHREQUEST=true
+      - OAUTH2_PROXY_PASS_USER_HEADERS=true
+      - OAUTH2_PROXY_REVERSE_PROXY=${OAUTH2_PROXY_REVERSE_PROXY:-true}
+      - OAUTH2_PROXY_PASS_ACCESS_TOKEN=true
+      - OAUTH2_PROXY_PASS_AUTHORIZATION_HEADER=true
+      - OAUTH2_PROXY_CODE_CHALLENGE_METHOD=${OAUTH2_PROXY_CODE_CHALLENGE_METHOD:-S256}
+      - OAUTH2_PROXY_COOKIE_SECURE=${OAUTH2_PROXY_COOKIE_SECURE:-true}
+      - OAUTH2_PROXY_CUSTOM_TEMPLATES_DIR=/templates
+      - OAUTH2_PROXY_SKIP_AUTH_REGEX=^/favicon\.ico$|^/favicon-.*\.png$|^/apple-touch-icon\.png$|^/.*-logo\.svg$|^/example-logo\.svg$|^/midata\.svg$
+      - OAUTH2_PROXY_FOOTER=© Region AZUR
+    restart: unless-stopped
+    networks:
+      - edge
+      - backend
+
+  portal:
+    build:
+      context: .
+      dockerfile: services/portal/Dockerfile
+    environment:
+      - PORTAL_PORT=3000
+      - PORTAL_BASE_URL=${PORTAL_BASE_URL}
+      - API_BASE_URL=${API_BASE_URL}
+      - PORTAL_TRUSTED_PROXY_CIDRS=${PORTAL_TRUSTED_PROXY_CIDRS}
+      - DATABASE_URL=${DATABASE_URL}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - HITOBITO_OIDC_ISSUER=${HITOBITO_OIDC_ISSUER}
+      - HITOBITO_USERINFO_URL=${HITOBITO_USERINFO_URL}
+    volumes:
+      - sqlite_data:/data
+    restart: unless-stopped
+    networks:
+      - backend
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      - API_PORT=4000
+      - API_BASE_URL=${API_BASE_URL}
+      - API_TRUSTED_PROXY_CIDRS=${API_TRUSTED_PROXY_CIDRS}
+      - DATABASE_URL=${DATABASE_URL}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - HITOBITO_OIDC_ISSUER=${HITOBITO_OIDC_ISSUER}
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_APP_INSTALLATION_ID=${GITHUB_APP_INSTALLATION_ID}
+      - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}
+    volumes:
+      - sqlite_data:/data
+    restart: unless-stopped
+    networks:
+      - backend
+
+volumes:
+  sqlite_data:
+  npm_data:
+  npm_letsencrypt:
+
+networks:
+  edge:
+  backend:
+    driver: bridge

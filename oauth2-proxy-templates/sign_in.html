@@ -1,0 +1,254 @@
+{{define "sign_in.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in - Decap CMS</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f6f8fb;
+      color: #111827;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 480px;
+      width: 100%;
+      background: #fff;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 22px rgba(0, 0, 0, 0.06);
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    .logo {
+      width: 85px;
+      height: 85px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+    .logo svg, .logo img { width: 40px; height: 40px; display: block; }
+
+    h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      color: #111827;
+      font-weight: 600;
+    }
+
+    .sub {
+      margin: 0.5rem 0 0 0;
+      color: #6b7280;
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    .content {
+      margin-top: 1.5rem;
+      display: grid;
+      gap: 1rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 0.45rem 0.95rem;
+      border-radius: 8px;
+      border: 1px solid #521d3a;
+      background: #521d3a;
+      color: #fff;
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+    }
+    .btn:hover { 
+      background: #6b2847;
+      border-color: #6b2847;
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn svg {
+      width: 18px;
+      height: 18px;
+      color: #fff;
+      stroke: #fff;
+      fill: #fff;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+      border-color: #d1d5db;
+    }
+    .btn-secondary:hover {
+      background: #d1d5db;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+    .divider::before, .divider::after {
+      content: "";
+      height: 1px;
+      background: #e5e7eb;
+      flex: 1;
+    }
+
+    .form {
+      display: grid;
+      gap: 0.85rem;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 0.25rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      color: #374151;
+      font-weight: 500;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+
+    input[type="text"]:focus,
+    input[type="password"]:focus {
+      outline: none;
+      border-color: #111827;
+      box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.1);
+    }
+
+    .alert {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      font-size: 0.9rem;
+    }
+
+    .footer {
+      margin-top: 1.5rem;
+      color: #9ca3af;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      text-align: center;
+    }
+    .footer a {
+      color: #111827;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+
+<body>
+  <main class="wrap">
+    <div class="header">
+      <div class="logo">
+        <img src="/region-azur-dms-logo.svg" alt="Region AZUR DMS Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+      </div>
+
+      <div>
+        <h1>Sign in</h1>
+        {{ if .SignInMessage }}
+          <p class="sub">{{.SignInMessage}}</p>
+        {{ else }}
+          <p class="sub">Authenticate to access Decap CMS</p>
+        {{ end }}
+      </div>
+    </div>
+
+    <div class="content">
+      <a class="btn" href="{{.ProxyPrefix}}/start?rd={{urlquery .Redirect}}">
+        <img src="/midata.svg" alt="Midata" style="width: 18px; height: 18px;" />
+        Midata Login
+      </a>
+
+      {{ if .CustomLogin }}
+        <div class="divider">or use email and password</div>
+
+        <form class="form" method="post" action="{{.ProxyPrefix}}/sign_in">
+          <input type="hidden" name="rd" value="{{.Redirect}}">
+          <div class="form-row">
+            <label for="username">Email</label>
+            <input id="username" name="username" type="text" autocomplete="email" required />
+          </div>
+          <div class="form-row">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+          </div>
+          <button class="btn" type="submit">Sign in</button>
+        </form>
+      {{ end }}
+
+      {{ if eq .StatusCode 400 401 }}
+        <div class="alert" role="alert">
+          {{ if eq .StatusCode 400 }}
+            Email cannot be empty
+          {{ else }}
+            Invalid email or password
+          {{ end }}
+        </div>
+      {{ end }}
+    </div>
+
+    {{ if eq .Footer "-" }}
+    {{ else if eq .Footer "" }}
+      <div class="footer">
+        © Region AZUR | <a href="https://decapcms.org" target="_blank" rel="noopener">Decap CMS</a>
+      </div>
+    {{ else }}
+      <div class="footer">{{.Footer}}</div>
+    {{ end }}
+  </main>
+</body>
+</html>
+{{end}}
+

@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+*.md
+!README.md
+.git
+.gitignore
+.env
+.env.*
+*.bak
+*.log
+.DS_Store
+Thumbs.db
+index-new.js
+REFACTORING-STATUS.md
+
