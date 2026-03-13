@@ -17,6 +17,8 @@ const config = require("./config");
 const db = require("./db");
 const { generalLimiter } = require("./middleware/rateLimiters");
 const { requireUser } = require("./lib/auth");
+const logger = require("./shared/logger");
+const httpLogger = require("./shared/httpLogger");
 
 // ─── Route modules ─────────────────────────────────────────────────────────────
 const adminRouter = require("./routes/admin");
@@ -30,6 +32,9 @@ const app = express();
 // Trust the first proxy (oauth2-proxy / nginx) so rate-limiters and IP-based
 // logic read the real client IP from X-Forwarded-For.
 app.set("trust proxy", 1);
+
+// HTTP request logging middleware (should be first)
+app.use(httpLogger);
 
 // Security headers
 app.use(
@@ -108,13 +113,44 @@ app.use("/.netlify/git", router);
 // ─── Server bootstrap ─────────────────────────────────────────────────────────
 
 (async () => {
-  if (!config.JWT_SECRET) {
-    throw new Error("JWT_SECRET environment variable must be set");
+  try {
+    if (!config.JWT_SECRET) {
+      throw new Error("JWT_SECRET environment variable must be set");
+    }
+    if (!config.GITHUB_APP_ID) {
+      throw new Error("GITHUB_APP_ID environment variable must be set");
+    }
+    if (!config.GITHUB_APP_INSTALLATION_ID) {
+      throw new Error("GITHUB_APP_INSTALLATION_ID environment variable must be set");
+    }
+    if (!config.GITHUB_APP_PRIVATE_KEY) {
+      throw new Error("GITHUB_APP_PRIVATE_KEY environment variable must be set");
+    }
+    
+    logger.info("API service starting...", {
+      environment: process.env.NODE_ENV || 'development',
+      debugLogging: logger.isDev(),
+      port: config.PORT,
+    });
+    
+    await ensureSchema(db);
+    logger.debug("Database schema ensured");
+    
+    app.listen(config.PORT, () => {
+      logger.success(`API listening on port ${config.PORT}`, {
+        url: `http://localhost:${config.PORT}`,
+      });
+      logger.info("API service ready", {
+        version: "4.0.0",
+        timestamp: new Date().toISOString(),
+      });
+    });
+  } catch (err) {
+    logger.error("API startup failed", {
+      error: err.message,
+      stack: logger.isDev() ? err.stack : undefined,
+    });
+    process.exit(1);
   }
-  await ensureSchema(db);
-  app.listen(config.PORT, () => {
-    console.log(`API listening on ${config.PORT}`);
-    console.log("API Service v4 (Modular)");
-  });
 })();
 

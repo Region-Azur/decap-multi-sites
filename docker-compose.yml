@@ -14,8 +14,8 @@ services:
 
   oauth2_proxy:
     build:
-      context: ./oauth2-proxy-templates
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: oauth2-proxy-templates/Dockerfile
     volumes:
       - ./oauth2-proxy-templates:/templates:ro
     environment:
@@ -57,6 +57,8 @@ services:
       - HITOBITO_OIDC_ISSUER=${HITOBITO_OIDC_ISSUER}
       - HITOBITO_USERINFO_URL=${HITOBITO_USERINFO_URL}
       - JWT_SECRET=${JWT_SECRET}
+      - DEV=${DEV:-false}
+      - NODE_ENV=production
     volumes:
       - sqlite_data:/data
     restart: unless-stopped
@@ -78,6 +80,8 @@ services:
       - GITHUB_APP_INSTALLATION_ID=${GITHUB_APP_INSTALLATION_ID}
       - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}
       - JWT_SECRET=${JWT_SECRET}
+      - DEV=${DEV:-false}
+      - NODE_ENV=production
     volumes:
       - sqlite_data:/data
     restart: unless-stopped

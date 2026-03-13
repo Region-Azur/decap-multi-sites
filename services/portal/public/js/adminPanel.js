@@ -1,10 +1,32 @@
+// Get admin JWT token
+let adminToken = null;
+
+async function getAdminToken() {
+  if (adminToken) return adminToken;
+  
+  try {
+    const res = await fetch('/admin/token');
+    if (!res.ok) throw new Error('Failed to get admin token');
+    const data = await res.json();
+    adminToken = data.token;
+    return adminToken;
+  } catch (e) {
+    alert('Error: Could not get authorization token. Please refresh and try again.');
+    throw e;
+  }
+}
+
 async function revokePermission(email, siteId) {
   if (!confirm('Revoke access for ' + email + ' to ' + siteId + '?')) return;
 
   try {
+    const token = await getAdminToken();
     const res = await fetch('/api/admin/permissions', {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
       body: JSON.stringify({ email: email, site_id: siteId })
     });
     if (res.ok || res.status === 204) {
@@ -23,9 +45,13 @@ async function editDomain(siteId, currentDomain) {
   if (newDomain === null) return;
 
   try {
+    const token = await getAdminToken();
     const res = await fetch('/api/admin/sites/' + siteId, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
       body: JSON.stringify({ domain: newDomain })
     });
     if (res.ok) {
@@ -44,8 +70,10 @@ async function deleteSite(siteId, siteName) {
   if (!confirm('Are you sure you want to delete the site "' + siteName + '"? This will remove the CMS configuration but NOT the GitHub repository.')) return;
 
   try {
+    const token = await getAdminToken();
     const res = await fetch('/api/admin/sites/' + siteId, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
     });
     if (res.ok || res.status === 204) {
       alert('Site deleted.');
@@ -69,8 +97,11 @@ async function resetRepository(siteId, siteName) {
   }
 
   try {
+    const token = await getAdminToken();
     // Obtain a short-lived signed confirmation token from the server
-    const tokenRes = await fetch('/api/admin/sites/' + siteId + '/reset-token');
+    const tokenRes = await fetch('/api/admin/sites/' + siteId + '/reset-token', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
     if (!tokenRes.ok) {
       alert('Could not obtain reset token: ' + (await tokenRes.text()));
       return;
@@ -79,7 +110,10 @@ async function resetRepository(siteId, siteName) {
 
     const res = await fetch('/api/admin/sites/' + siteId + '/reset', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
       body: JSON.stringify({ confirmationToken })
     });
     if (res.ok) {
@@ -101,9 +135,13 @@ async function changeTheme(siteId) {
   if (!confirm('This will overwrite _config.yml and commit new template files. Continue?')) return;
 
   try {
+    const token = await getAdminToken();
     const res = await fetch('/api/admin/sites/' + siteId + '/template', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
       body: JSON.stringify({ theme: theme })
     });
     if (res.ok) {
@@ -124,9 +162,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const data = Object.fromEntries(formData.entries());
 
     try {
+      const token = await getAdminToken();
       const res = await fetch('/api/admin/sites', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
         body: JSON.stringify(data)
       });
       if (res.ok) {
@@ -147,9 +189,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const data = Object.fromEntries(formData.entries());
 
     try {
+      const token = await getAdminToken();
       const res = await fetch('/api/admin/permissions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
         body: JSON.stringify(data)
       });
       if (res.ok) {

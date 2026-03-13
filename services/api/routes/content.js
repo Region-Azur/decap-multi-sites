@@ -16,6 +16,43 @@ const { getTemplateFiles } = require("../templates");
 
 const router = express.Router();
 
+// ─── Helper: Validate image size ──────────────────────────────────────────────
+
+/**
+ * Check if a base64-encoded image is too large
+ * Returns { isWarning: boolean, message: string } or null
+ */
+function validateImageSize(base64Url, fieldName) {
+  if (!base64Url || !base64Url.startsWith("data:")) {
+    return null; // Not a base64 image, skip validation
+  }
+
+  // Extract the actual base64 data (after comma)
+  const base64Data = base64Url.split(",")[1];
+  if (!base64Data) return null;
+
+  // Calculate size: base64 is ~33% larger than binary
+  // Each base64 character = 6 bits, so actual size ≈ (base64Length * 6) / 8
+  const binarySizeBytes = Math.ceil((base64Data.length * 6) / 8);
+  const sizeKB = binarySizeBytes / 1024;
+  const sizeMB = sizeKB / 1024;
+
+  // Warnings
+  if (sizeMB > 2) {
+    return {
+      isWarning: true,
+      message: `⚠️  ${fieldName} is very large (${sizeMB.toFixed(2)}MB). This will increase the size of your website and may slow down page loads. Consider compressing or resizing your image.`,
+    };
+  } else if (sizeKB > 500) {
+    return {
+      isWarning: true,
+      message: `⚠️  ${fieldName} is large (${sizeKB.toFixed(0)}KB). Consider optimizing or compressing your image for better performance.`,
+    };
+  }
+
+  return null; // No warning
+}
+
 // ─── PUT /sites/:siteId/settings ──────────────────────────────────────────────
 
 router.put("/:siteId/settings", async (req, res) => {
@@ -27,6 +64,19 @@ router.put("/:siteId/settings", async (req, res) => {
   if (!site) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const { page_title, suptitle, brand_icon, favicon, display_name } = req.body || {};
+
+  // Validate image sizes and collect warnings
+  const warnings = [];
+  
+  if (brand_icon !== undefined && brand_icon) {
+    const brandIconWarning = validateImageSize(brand_icon, "Chirpy Avatar (brand_icon)");
+    if (brandIconWarning) warnings.push(brandIconWarning);
+  }
+  
+  if (favicon !== undefined && favicon) {
+    const faviconWarning = validateImageSize(favicon, "Favicon");
+    if (faviconWarning) warnings.push(faviconWarning);
+  }
 
   const updatePayload = {
     ...(page_title    !== undefined && { page_title }),
@@ -69,7 +119,11 @@ router.put("/:siteId/settings", async (req, res) => {
     console.error(`DEBUG: Failed to sync templates for ${updatedSite.github_repo}: ${err.message}`);
   }
 
-  res.json({ success: true });
+  // Return success with any warnings
+  res.json({ 
+    success: true,
+    warnings: warnings.length > 0 ? warnings.map(w => w.message) : undefined
+  });
 });
 
 // ─── GET /sites/:siteId/contents ──────────────────────────────────────────────
@@ -198,6 +252,69 @@ router.get("/:siteId/files", async (req, res) => {
       res.json([]);
     } else {
       console.error("List files error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// Serve media files (images, etc.) for editor preview
+// This allows Decap CMS to display images in the editor by fetching them through the API
+router.get("/sites/:siteId/media/*", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const site = await getSiteForUser(user, req.params.siteId);
+  if (!site) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const mediaPath = req.params[0]; // Capture the * part (file path)
+  const octokit = await getOctokit();
+  const { owner, repo } = parseRepo(site.github_repo);
+
+  try {
+    // Fetch the file content from GitHub
+    const { data } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: mediaPath,
+      ref: site.branch,
+    });
+
+    // If it's a binary file (image, etc.), GitHub returns it base64-encoded
+    if (data.encoding === "base64" && data.content) {
+      const buffer = Buffer.from(data.content, "base64");
+      
+      // Set appropriate content type based on file extension
+      const ext = mediaPath.split(".").pop().toLowerCase();
+      const contentTypes = {
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        gif: "image/gif",
+        svg: "image/svg+xml",
+        webp: "image/webp",
+      };
+      
+      const contentType = contentTypes[ext] || "application/octet-stream";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=3600"); // Cache for 1 hour
+      res.setHeader("Access-Control-Allow-Origin", "*"); // Allow cross-origin access for editor preview
+      
+      res.send(buffer);
+    } else if (data.type === "file") {
+      // Text file
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.send(data.content);
+    } else {
+      res.status(404).json({ error: "File not found or is a directory" });
+    }
+  } catch (err) {
+    if (err.status === 404) {
+      res.status(404).json({ error: "Media file not found" });
+    } else {
+      console.error(`DEBUG: Failed to fetch media ${mediaPath}: ${err.message}`);
       res.status(500).json({ error: err.message });
     }
   }

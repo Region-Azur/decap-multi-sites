@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { normalizeEmail, fetchUserInfo, parseJwt } = require("../utils/oidc");
 const config = require("../config");
+const logger = require("../shared/logger");
 
 async function getAuthInfo(req) {
 
@@ -18,7 +19,7 @@ async function getAuthInfo(req) {
   if (idToken) {
     const claims = parseJwt(idToken);
     if (claims) {
-      console.log("DEBUG: ID Token claims:", JSON.stringify(claims, null, 2));
+      logger.debug("ID Token claims parsed", { claimsKeys: Object.keys(claims) });
       if (claims.name) {
         name = claims.name;
       } else if (claims.nickname) {
@@ -30,10 +31,10 @@ async function getAuthInfo(req) {
     }
   }
 
-  console.log(`DEBUG: Extracted auth info: issuer=${issuer}, sub=${sub}, email=${email}, name=${name}`);
+  logger.debug("Auth info extracted", { issuer: issuer.substring(0, 30), hasEmail: !!email, hasSub: !!sub });
 
   if (!issuer || !sub || !email) {
-    console.log("DEBUG: Auth info missing required fields");
+    logger.trace("Auth info missing required fields", { issuer: !!issuer, sub: !!sub, email: !!email });
     return null;
   }
 
@@ -56,7 +57,7 @@ async function getOrCreateUser(db, auth) {
     const shouldSync = auth.accessToken && auth.issuer && (nameIsId || !existing.last_synced_at || Date.now() - new Date(existing.last_synced_at).getTime() > 24 * 60 * 60 * 1000);
 
     if (shouldSync) {
-      console.log(`DEBUG: Syncing user info for ${auth.email}`);
+      logger.debug("Syncing user info", { email: auth.email });
       try {
         const userInfo = await fetchUserInfo(auth.issuer, auth.accessToken, config.USERINFO_URL_OVERRIDE);
 

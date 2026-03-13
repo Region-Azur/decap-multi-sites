@@ -5,5 +5,6 @@ module.exports = {
   GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY,
   GITHUB_APP_INSTALLATION_ID: process.env.GITHUB_APP_INSTALLATION_ID,
   JWT_SECRET: process.env.JWT_SECRET, // Required — no fallback; startup will throw if missing
+  API_BODY_LIMIT: process.env.API_BODY_LIMIT || "50mb", // Increased from 100kb default to support large settings
 };
 

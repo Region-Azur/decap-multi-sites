@@ -110,8 +110,11 @@ function renderDecapShell(site, token, nonce = "") {
         logout: () => Promise.resolve()
       };
 
+      // Mark user as ready immediately - we have the token from the portal
+      window.isUserReady = true;
+
       window.netlifyIdentity = {
-        currentUser: () => window.isUserReady ? window.mockUser : null,
+        currentUser: () => window.mockUser,
         _listeners: { login: [] },
         on: (event, cb) => {
           if (!window.netlifyIdentity._listeners[event]) {
@@ -489,7 +492,8 @@ function renderDecapShell(site, token, nonce = "") {
               gateway_url: '${escapeJs(config.API_BASE_URL)}/.netlify/git',
               repo: '${escapeJs(site.github_repo)}',
               branch: '${escapeJs(site.branch)}',
-              squash_merges: true
+              squash_merges: true,
+              preview_context: 'deploy'
             },
             site_url: '${escapeJs(publicSiteUrl || config.API_BASE_URL)}',
             display_url: '${escapeJs(publicSiteUrl || config.API_BASE_URL)}',
@@ -498,8 +502,8 @@ function renderDecapShell(site, token, nonce = "") {
             editor: {
               preview: false
             },
-            media_folder: '${escapeJs(site.media_path)}',
-            public_folder: '${escapeJs(site.media_path)}',
+            media_folder: 'static/uploads',
+            public_folder: '${escapeJs((internalLinkPrefix || "") + "/static/uploads")}',
             collections: [{
               name: "pages",
               label: "Pages",
@@ -527,6 +531,40 @@ function renderDecapShell(site, token, nonce = "") {
 
           console.log("Initializing CMS with manual config...", config);
           window.CMS.init({ config, load_config_file: false });
+
+          // Register custom media preview handler to load images from API during editing
+          // This ensures images display correctly in the editor even before they're published
+          window.CMS.registerMediaLibrary({
+            name: "image-preview-handler",
+            init: () => {
+              // Hook into the markdown widget to rewrite image URLs for preview
+              const originalMarkdownToPreview = window.CMS.widgets.markdown;
+              if (originalMarkdownToPreview && originalMarkdownToPreview.preview) {
+                const originalPreview = originalMarkdownToPreview.preview;
+                window.CMS.widgets.markdown.preview = function(props) {
+                  // This is called for preview rendering
+                  return originalPreview.call(this, props);
+                };
+              }
+            }
+          });
+
+          // Intercept fetch requests to rewrite media URLs for editor preview
+          const originalFetch = window.fetch;
+          window.fetch = function(...args) {
+            const url = args[0];
+            // If this is a request for a static/uploads file, rewrite it to use our API endpoint
+            if (typeof url === 'string' && url.includes('static/uploads')) {
+              const sitePath = '${escapeJs(site.id)}';
+              const newUrl = url.replace(
+                /.*static\\/uploads\\/(.*)/,
+                '/api/sites/' + sitePath + '/media/static/uploads/$1'
+              );
+              args[0] = newUrl;
+            }
+            return originalFetch.apply(this, args);
+          };
+
 
           setTimeout(async () => {
             try {

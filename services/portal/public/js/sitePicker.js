@@ -16,6 +16,23 @@ const cropConfirm = document.getElementById('cropConfirm');
 let cropper = null;
 let currentTargetInput = null;
 let currentFileInput = null;
+let userToken = null;
+
+// Get user JWT token
+async function getUserToken() {
+  if (userToken) return userToken;
+  
+  try {
+    const res = await fetch('/sites/token');
+    if (!res.ok) throw new Error('Failed to get user token');
+    const data = await res.json();
+    userToken = data.token;
+    return userToken;
+  } catch (e) {
+    alert('Error: Could not get authorization token. Please refresh and try again.');
+    throw e;
+  }
+}
 
 async function readAsDataUrl(file) {
   return await new Promise((resolve, reject) => {
@@ -171,9 +188,13 @@ form?.addEventListener('submit', async (e) => {
   delete data.site_id;
 
   try {
+    const token = await getUserToken();
     const saveRes = await fetch('/api/sites/' + siteId + '/settings', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
       body: JSON.stringify(data)
     });
 
@@ -182,6 +203,15 @@ form?.addEventListener('submit', async (e) => {
       alert('Save failed: ' + (err.error || 'Unknown error'));
       setSaving(false);
       return;
+    }
+
+    const result = await saveRes.json();
+    
+    // Show warnings if any
+    if (result.warnings && result.warnings.length > 0) {
+      const warningMessage = result.warnings.join('\n\n');
+      console.warn('Image size warnings:', result.warnings);
+      alert('⚠️  Settings saved with warnings:\n\n' + warningMessage);
     }
 
     showSettingsNotice();

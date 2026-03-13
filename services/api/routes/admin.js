@@ -9,6 +9,7 @@ const crypto = require("crypto");
 const express = require("express");
 const db = require("../db");
 const config = require("../config");
+const logger = require("../shared/logger");
 const { requireAdmin } = require("../lib/auth");
 const { getOctokit, parseRepo, commitMultipleFiles } = require("../lib/github-client");
 const { generateAllFavicons } = require("../utils/favicon-generator");
@@ -16,6 +17,45 @@ const { getTemplateFiles } = require("../templates");
 const { adminWriteLimiter } = require("../middleware/rateLimiters");
 
 const router = express.Router();
+
+// ─── Helper: Validate image size ──────────────────────────────────────────────
+
+/**
+ * Check if a base64-encoded image is too large
+ * Returns { isWarning: boolean, message: string }
+ */
+function validateImageSize(base64Url, fieldName) {
+  if (!base64Url || !base64Url.startsWith("data:")) {
+    return null; // Not a base64 image, skip validation
+  }
+
+  // Extract the actual base64 data (after comma)
+  const base64Data = base64Url.split(",")[1];
+  if (!base64Data) return null;
+
+  // Calculate size: base64 is ~33% larger than binary
+  // Each base64 character = 6 bits, so actual size ≈ (base64Length * 6) / 8
+  const binarySizeBytes = Math.ceil((base64Data.length * 6) / 8);
+  const sizeKB = binarySizeBytes / 1024;
+  const sizeMB = sizeKB / 1024;
+
+  // Warnings
+  if (sizeMB > 2) {
+    return {
+      isWarning: true,
+      message: `⚠️  ${fieldName} is very large (${sizeMB.toFixed(2)}MB). This will increase the size of your website and may slow down page loads. Consider compressing or resizing your image.`,
+    };
+  } else if (sizeKB > 500) {
+    return {
+      isWarning: true,
+      message: `⚠️  ${fieldName} is large (${sizeKB.toFixed(0)}KB). Consider optimizing or compressing your image for better performance.`,
+    };
+  }
+
+  return null; // No warning
+}
+
+// ...existing code...
 
 // ─── GET /admin/sites ─────────────────────────────────────────────────────────
 
@@ -83,14 +123,17 @@ router.post("/sites", adminWriteLimiter, async (req, res) => {
       githubRepo: finalGithubRepo,
     });
 
-    console.log(`INFO: Applying theme '${theme}' to ${finalGithubRepo}...`);
+    logger.info(`Applying theme '${theme}' to repository`, { repo: finalGithubRepo });
     await commitMultipleFiles(octokit, owner, repo, branch, templateUrls, `Initialize theme: ${theme}`);
 
     try {
       await octokit.repos.createPagesSite({ owner, repo, build_type: "workflow", source: undefined });
-      console.log("DEBUG: GitHub Pages enabled (workflow)");
+      logger.debug("GitHub Pages enabled", { buildType: "workflow", repo: finalGithubRepo });
     } catch (pagesErr) {
-      console.error(`DEBUG: Failed to enable Pages: ${pagesErr.message}`);
+      logger.warn("Failed to enable GitHub Pages", { 
+        repo: finalGithubRepo, 
+        error: pagesErr.message 
+      });
     }
 
     if (domain) {
@@ -168,6 +211,19 @@ router.put("/sites/:siteId", adminWriteLimiter, async (req, res) => {
   const site = await db("sites").where({ id: siteId }).first();
   if (!site) { res.status(404).json({ error: "Site not found" }); return; }
 
+  // Validate image sizes and collect warnings
+  const warnings = [];
+  
+  if (brand_icon !== undefined && brand_icon) {
+    const brandIconWarning = validateImageSize(brand_icon, "Chirpy Avatar (brand_icon)");
+    if (brandIconWarning) warnings.push(brandIconWarning);
+  }
+  
+  if (favicon !== undefined && favicon) {
+    const faviconWarning = validateImageSize(favicon, "Favicon");
+    if (faviconWarning) warnings.push(faviconWarning);
+  }
+
   await db("sites").where({ id: siteId }).update({
     domain:       domain       !== undefined ? domain       : site.domain,
     display_name: display_name || site.display_name,
@@ -228,14 +284,18 @@ router.put("/sites/:siteId", adminWriteLimiter, async (req, res) => {
           content: Buffer.from(configFiles["_config.yml"]).toString("base64"),
           branch: targetBranch, sha,
         });
-        console.log("DEBUG: _config.yml updated successfully");
+        logger.debug("_config.yml updated successfully");
       }
     } catch (err) {
-      console.error(`DEBUG: Failed to update _config.yml: ${err.message}`);
+      logger.error("Failed to update _config.yml", { error: err.message });
     }
   }
 
-  res.json({ success: true });
+  // Return success with any warnings
+  res.json({ 
+    success: true,
+    warnings: warnings.length > 0 ? warnings.map(w => w.message) : undefined
+  });
 });
 
 // ─── DELETE /admin/sites/:siteId ───────────────────────────────────────���──────

@@ -11,12 +11,17 @@ const { listPermittedSites, hasPermission } = require("./middleware/permissions"
 const { renderSitePicker } = require("./views/sitePicker");
 const { renderAdminPanel } = require("./views/adminPanel");
 const { renderDecapShell } = require("./views/decapShell");
+const logger = require("./shared/logger");
+const httpLogger = require("./shared/httpLogger");
 
 const app = express();
 // Trust the first proxy (oauth2-proxy / nginx) so express-rate-limit and
 // other IP-based logic sees the real client IP from X-Forwarded-For.
 app.set("trust proxy", 1);
 const db = createDb(config.DATABASE_URL);
+
+// HTTP request logging middleware
+app.use(httpLogger);
 
 // Security headers (relaxed for the portal which serves HTML pages with inline scripts)
 app.use(helmet({
@@ -43,6 +48,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Health check
 app.get("/health", (_req, res) => {
+  logger.debug("Health check requested");
   res.json({ status: "ok" });
 });
 
@@ -93,6 +99,55 @@ app.get("/admin", async (req, res) => {
   const allUsers = await db("users").orderBy("name");
 
   res.type("html").send(renderAdminPanel(user, sites, permissions, allUsers));
+});
+
+// Admin JWT token endpoint - generate token for admin API calls
+app.get("/admin/token", async (req, res) => {
+  const auth = await getAuthInfo(req);
+  if (!auth) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const user = await getOrCreateUser(db, auth);
+
+  if (!isAdmin(user.email)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  // Generate JWT token for admin operations
+  const token = jwt.sign(
+    { sub: user.id, email: user.email },
+    config.JWT_SECRET,
+    { algorithm: "HS256", expiresIn: "1h" }
+  );
+
+  logger.debug("Admin JWT token generated", { userId: user.id, email: user.email });
+
+  res.json({ token });
+});
+
+// User JWT token endpoint - generate token for user API calls (site settings)
+app.get("/sites/token", async (req, res) => {
+  const auth = await getAuthInfo(req);
+  if (!auth) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const user = await getOrCreateUser(db, auth);
+
+  // Generate JWT token for user operations (site settings, content)
+  const token = jwt.sign(
+    { sub: user.id, email: user.email },
+    config.JWT_SECRET,
+    { algorithm: "HS256", expiresIn: "1h" }
+  );
+
+  logger.debug("User JWT token generated", { userId: user.id, email: user.email });
+
+  res.json({ token });
 });
 
 // Minimal config.yml for Decap CMS (fallback)
@@ -151,9 +206,9 @@ app.get("/sites/:siteId", async (req, res) => {
     // 'unsafe-inline' is a CSP Level-1 fallback; modern browsers ignore it when a nonce is present.
     `script-src 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com; ` +
     `style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; ` +
-    `img-src 'self' data: https:; ` +
+    `img-src 'self' data: blob: https:; ` +
     `font-src 'self' https://cdnjs.cloudflare.com; ` +
-    `connect-src 'self'; ` +
+    `connect-src 'self' blob: https://unpkg.com; ` +
     `frame-ancestors 'none';`
   );
 
@@ -255,11 +310,37 @@ app.get("/", (_req, res) => {
 
 // Start server
 (async () => {
-  if (!config.JWT_SECRET) {
-    throw new Error("JWT_SECRET environment variable must be set");
+  try {
+    if (!config.JWT_SECRET) {
+      throw new Error("JWT_SECRET environment variable must be set");
+    }
+    if (!config.DEFAULT_OIDC_ISSUER) {
+      throw new Error("OIDC_ISSUER or HITOBITO_OIDC_ISSUER environment variable must be set");
+    }
+    
+    logger.info("Portal service starting...", {
+      environment: process.env.NODE_ENV || 'development',
+      debugLogging: logger.isDev(),
+      port: config.PORT,
+    });
+    
+    await ensureSchema(db);
+    logger.debug("Database schema ensured");
+    
+    app.listen(config.PORT, () => {
+      logger.success(`Portal listening on port ${config.PORT}`, {
+        url: `http://localhost:${config.PORT}`,
+      });
+      logger.info("Portal service ready", {
+        version: "1.0.0",
+        timestamp: new Date().toISOString(),
+      });
+    });
+  } catch (err) {
+    logger.error("Portal startup failed", {
+      error: err.message,
+      stack: logger.isDev() ? err.stack : undefined,
+    });
+    process.exit(1);
   }
-  await ensureSchema(db);
-  app.listen(config.PORT, () => {
-    console.log(`Portal listening on ${config.PORT}`);
-  });
 })();

@@ -14,8 +14,8 @@ services:
 
   oauth2_proxy:
     build:
-      context: ./oauth2-proxy-templates
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: oauth2-proxy-templates/Dockerfile
     environment:
       - OAUTH2_PROXY_PROVIDER=oidc
       - OAUTH2_PROXY_OIDC_ISSUER_URL=${HITOBITO_OIDC_ISSUER}
@@ -56,6 +56,8 @@ services:
       - HITOBITO_OIDC_ISSUER=${HITOBITO_OIDC_ISSUER}
       - HITOBITO_USERINFO_URL=${HITOBITO_USERINFO_URL}
       - JWT_SECRET=${JWT_SECRET}
+      - DEV=${DEV:-false}
+      - NODE_ENV=production
     depends_on:
       - mysql
     restart: unless-stopped
@@ -79,6 +81,8 @@ services:
       - GITHUB_APP_INSTALLATION_ID=${GITHUB_APP_INSTALLATION_ID}
       - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}
       - JWT_SECRET=${JWT_SECRET}
+      - DEV=${DEV:-false}
+      - NODE_ENV=production
     depends_on:
       - mysql
     restart: unless-stopped
