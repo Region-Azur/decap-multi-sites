@@ -456,6 +456,25 @@ function renderDecapShell(site, token, nonce = "") {
             return (internalLinkPrefix || "") + "/" + normalizedSlug + "/";
           };
 
+          const normalizeDownloadPath = function(rawPath) {
+            const value = String(rawPath || "").trim();
+            if (!value) return "";
+            if (value.startsWith("http://") || value.startsWith("https://")) return value;
+            let cleaned = value.replace(/^"+|"+$/g, "");
+            if (internalLinkPrefix && cleaned.startsWith(internalLinkPrefix + "/")) {
+              cleaned = cleaned.slice(internalLinkPrefix.length + 1);
+            }
+            while (cleaned.startsWith("/")) {
+              cleaned = cleaned.slice(1);
+            }
+            if (!cleaned.startsWith("static/uploads/")) {
+              cleaned = "static/uploads/" + cleaned;
+            }
+            return "/" + cleaned;
+          };
+
+          const escapeAttribute = (value) => String(value || "").replace(/\"/g, "\\\"");
+
           window.CMS.registerEditorComponent({
             id: "internal-link",
             label: "Internal Link",
@@ -482,6 +501,48 @@ function renderDecapShell(site, token, nonce = "") {
             toPreview: function(obj) {
               const previewPath = buildInternalLink(obj.path);
               return '<a href="' + previewPath + '">' + obj.title + '</a>';
+            }
+          });
+
+          window.CMS.registerEditorComponent({
+            id: "download-link",
+            label: "Download",
+            fields: [
+              { name: "label", label: "Button Text", widget: "string", default: "Download" },
+              { name: "file", label: "File", widget: "file" },
+              { name: "variant", label: "Style", widget: "select", default: "primary", options: ["primary", "outline-primary", "secondary", "link"] },
+              { name: "new_tab", label: "Open in new tab", widget: "boolean", required: false, default: true }
+            ],
+            // Keep matching broad and parse attrs manually so order/quoting differences still round-trip.
+            pattern: /\\{\\%\\s*include\\s+download\\.html\\b[^%]*\\%\\}/,
+            fromBlock: function(match) {
+              const block = match && match[0] ? match[0] : "";
+              const readAttr = function(name) {
+                const rx = new RegExp(name + "\\\\s*=\\\\s*(?:\\\"([^\\\"]*)\\\"|'([^']*)'|([^\\\\s%]+))", "i");
+                const m = block.match(rx);
+                if (!m) return "";
+                return m[1] || m[2] || m[3] || "";
+              };
+
+              const newTabRaw = String(readAttr("new_tab") || "").trim().toLowerCase();
+              return {
+                file: readAttr("href") || "",
+                label: readAttr("label") || "Download",
+                variant: readAttr("variant") || "primary",
+                new_tab: newTabRaw ? newTabRaw === "true" : true,
+              };
+            },
+            toBlock: function(obj) {
+              const href = normalizeDownloadPath(obj.file || obj.href || "");
+              const label = escapeAttribute(obj.label || "Download");
+              const variant = obj.variant || "primary";
+              const newTab = obj.new_tab !== false;
+              const variantPart = variant ? ' variant="' + variant + '"' : '';
+              return '{% include download.html href="' + escapeAttribute(href) + '" label="' + label + '"' + variantPart + ' new_tab=' + newTab + ' %}';
+            },
+            toPreview: function(obj) {
+              const label = escapeAttribute(obj.label || "Download");
+              return '<button style="padding:8px 12px;background:#0d6efd;border:1px solid #0d6efd;color:#fff;border-radius:4px;cursor:pointer;">' + label + '</button>';
             }
           });
 

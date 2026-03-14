@@ -442,6 +442,30 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 `;
 
+    files['_includes/download.html'] = `{% assign href = include.href | default: "" %}
+{% if href == "" %}
+  <span class="text-danger">Missing download link</span>
+{% else %}
+  {% assign variant = include.variant | default: "primary" %}
+  {% assign new_tab = include.new_tab | default: true %}
+  {% assign download_attr = include.download %}
+  {% if download_attr != false %}
+    {% assign download_attr = true %}
+  {% endif %}
+  {% assign base_classes = "btn btn-" | append: variant %}
+  {% if variant == "link" %}
+    {% assign base_classes = "link" %}
+  {% endif %}
+  {% assign extra_class = include.class | default: "" %}
+  <a class="{{ base_classes }} download-link {{ extra_class }}"
+     href="{{ href | relative_url }}"
+     {% if new_tab %}target="_blank" rel="noopener noreferrer"{% endif %}
+     {% if download_attr %}download{% endif %}>
+    {{ include.label | default: "Download" }}
+  </a>
+{% endif %}
+`;
+
     // Don't override footer.html - let Chirpy use its defaults
     // The social links in _config.yml already handle the footer customization
     // Favicons are generated automatically and added via the admin route
