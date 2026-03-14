@@ -43,8 +43,7 @@ function isAdmin(email) {
   return config.ADMIN_EMAILS.includes(email.toLowerCase());
 }
 
-// Serve static files (CSS, JS, images)
-app.use(express.static(path.join(__dirname, "public")));
+// (static assets mounted after media proxy routes to avoid 404 interception)
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -302,6 +301,106 @@ collections:
   res.type("text/yaml").send(configYaml);
 });
 
+// Proxy media asset requests from the editor to the API (with auth + permission check)
+app.get("/sites/:siteId/media/*", async (req, res) => {
+  logger.info("Media proxy hit (editor)", { path: req.path });
+  const auth = await getAuthInfo(req);
+  if (!auth) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+
+  const siteId = (req.params.siteId || "").toLowerCase();
+  const user = await getOrCreateUser(db, auth);
+  if (!(await hasPermission(db, user, siteId))) {
+    res.status(403).send("Forbidden");
+    return;
+  }
+
+  const mediaPath = req.params[0];
+  if (!mediaPath) {
+    res.status(400).send("Missing media path");
+    return;
+  }
+
+  const forwardHeaders = {
+    "x-auth-request-email": auth.email,
+    "x-auth-request-user": auth.sub,
+    "x-auth-request-issuer": auth.issuer,
+    "x-auth-request-preferred-username": auth.email,
+  };
+
+  const apiBase = config.API_INTERNAL_URL || config.API_BASE_URL;
+  const apiUrl = `${apiBase}/api/sites/${encodeURIComponent(siteId)}/media/${encodeURI(mediaPath)}`;
+
+  try {
+    const apiRes = await fetch(apiUrl, { headers: forwardHeaders });
+    logger.info("Media proxy (editor) upstream response", { apiUrl, status: apiRes.status });
+
+    res.status(apiRes.status);
+    apiRes.headers.forEach((value, key) => {
+      if (key.toLowerCase() === "content-length") return;
+      res.setHeader(key, value);
+    });
+
+    const body = await apiRes.arrayBuffer();
+    res.send(Buffer.from(body));
+  } catch (err) {
+    console.error("Media proxy failed", err);
+    res.status(502).send("Upstream media fetch failed");
+  }
+});
+
+// Proxy site-scoped public media paths (e.g., /<site>/static/uploads/foo.jpg) to the API
+app.get("/:siteId/static/uploads/*", async (req, res) => {
+  logger.info("Media proxy hit (public)", { path: req.path });
+  const auth = await getAuthInfo(req);
+  if (!auth) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+
+  const siteId = (req.params.siteId || "").toLowerCase();
+  const user = await getOrCreateUser(db, auth);
+  if (!(await hasPermission(db, user, siteId))) {
+    res.status(403).send("Forbidden");
+    return;
+  }
+
+  const mediaPath = req.params[0];
+  if (!mediaPath) {
+    res.status(400).send("Missing media path");
+    return;
+  }
+
+  const forwardHeaders = {
+    "x-auth-request-email": auth.email,
+    "x-auth-request-user": auth.sub,
+    "x-auth-request-issuer": auth.issuer,
+    "x-auth-request-preferred-username": auth.email,
+  };
+
+  const apiBase = config.API_INTERNAL_URL || config.API_BASE_URL;
+  const apiUrl = `${apiBase}/api/sites/${encodeURIComponent(siteId)}/media/static/uploads/${encodeURI(mediaPath)}`;
+
+  try {
+    const apiRes = await fetch(apiUrl, { headers: forwardHeaders });
+    logger.info("Media proxy (public) upstream response", { apiUrl, status: apiRes.status });
+    res.status(apiRes.status);
+    apiRes.headers.forEach((value, key) => {
+      if (key.toLowerCase() === "content-length") return;
+      res.setHeader(key, value);
+    });
+    const body = await apiRes.arrayBuffer();
+    res.send(Buffer.from(body));
+  } catch (err) {
+    console.error("Media proxy failed", err);
+    res.status(502).send("Upstream media fetch failed");
+  }
+});
+
+// Serve static files (CSS, JS, images)
+app.use(express.static(path.join(__dirname, "public")));
 
 // Root: redirect to sites (auth handled by /sites)
 app.get("/", (_req, res) => {

@@ -7,6 +7,7 @@ module.exports = {
     .filter(Boolean),
   DEFAULT_OIDC_ISSUER: process.env.OIDC_ISSUER || process.env.HITOBITO_OIDC_ISSUER || "",
   API_BASE_URL: process.env.API_BASE_URL || process.env.PORTAL_BASE_URL || "",
+  API_INTERNAL_URL: process.env.API_INTERNAL_URL || "http://api:4000",
   USERINFO_URL_OVERRIDE:
     process.env.OIDC_USERINFO_URL || process.env.HITOBITO_USERINFO_URL || "",
   JWT_SECRET: process.env.JWT_SECRET, // Required — shared with the API service

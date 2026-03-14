@@ -259,7 +259,7 @@ router.get("/:siteId/files", async (req, res) => {
 
 // Serve media files (images, etc.) for editor preview
 // This allows Decap CMS to display images in the editor by fetching them through the API
-router.get("/sites/:siteId/media/*", async (req, res) => {
+router.get("/:siteId/media/*", async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) return;
 
@@ -270,11 +270,11 @@ router.get("/sites/:siteId/media/*", async (req, res) => {
   }
 
   const mediaPath = req.params[0]; // Capture the * part (file path)
+  console.log("DEBUG: Media fetch", { siteId: site.id, branch: site.branch, mediaPath });
   const octokit = await getOctokit();
   const { owner, repo } = parseRepo(site.github_repo);
 
   try {
-    // Fetch the file content from GitHub
     const { data } = await octokit.repos.getContent({
       owner,
       repo,
@@ -282,36 +282,56 @@ router.get("/sites/:siteId/media/*", async (req, res) => {
       ref: site.branch,
     });
 
-    // If it's a binary file (image, etc.), GitHub returns it base64-encoded
-    if (data.encoding === "base64" && data.content) {
-      const buffer = Buffer.from(data.content, "base64");
-      
-      // Set appropriate content type based on file extension
-      const ext = mediaPath.split(".").pop().toLowerCase();
-      const contentTypes = {
-        jpg: "image/jpeg",
-        jpeg: "image/jpeg",
-        png: "image/png",
-        gif: "image/gif",
-        svg: "image/svg+xml",
-        webp: "image/webp",
-      };
-      
-      const contentType = contentTypes[ext] || "application/octet-stream";
+    // Set appropriate content type based on file extension
+    const ext = mediaPath.split(".").pop().toLowerCase();
+    const contentTypes = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      svg: "image/svg+xml",
+      webp: "image/webp",
+    };
+    const contentType = contentTypes[ext] || "application/octet-stream";
+
+    const sendBuffer = (buffer) => {
       res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Length", buffer.length);
       res.setHeader("Cache-Control", "public, max-age=3600"); // Cache for 1 hour
       res.setHeader("Access-Control-Allow-Origin", "*"); // Allow cross-origin access for editor preview
-      
       res.send(buffer);
-    } else if (data.type === "file") {
-      // Text file
+    };
+
+    // Primary: content API returns inline base64
+    if (data.encoding === "base64" && data.content) {
+      sendBuffer(Buffer.from(data.content, "base64"));
+      return;
+    }
+
+    // Fallback for large files (>1MB): fetch blob by SHA
+    if (data.type === "file" && data.sha) {
+      try {
+        const blob = await octokit.git.getBlob({ owner, repo, file_sha: data.sha });
+        if (blob.data && blob.data.encoding === "base64" && blob.data.content) {
+          sendBuffer(Buffer.from(blob.data.content, "base64"));
+          return;
+        }
+      } catch (blobErr) {
+        console.error(`DEBUG: Failed blob fetch for ${mediaPath}: ${blobErr.message}`);
+      }
+    }
+
+    // Text file fallback
+    if (data.type === "file" && typeof data.content === "string") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.send(data.content);
-    } else {
-      res.status(404).json({ error: "File not found or is a directory" });
+      return;
     }
+
+    res.status(404).json({ error: "File not found or is a directory" });
   } catch (err) {
     if (err.status === 404) {
+      console.log("DEBUG: Media file not found", { mediaPath });
       res.status(404).json({ error: "Media file not found" });
     } else {
       console.error(`DEBUG: Failed to fetch media ${mediaPath}: ${err.message}`);
